@@ -1,0 +1,5 @@
+## RUN
+```bash
+./build
+./game
+```
