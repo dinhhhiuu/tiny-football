@@ -1,0 +1,34 @@
+# ===== Compiler =====
+CXX = g++
+CXXFLAGS = -std=c++17 -Wall -Wextra -Ilib/SDL2/include
+LDFLAGS = -Llib/SDL2/lib
+LIBS = -lmingw32 -lSDL2main -lSDL2
+
+# ===== Directories =====
+SRC_DIR = src
+OBJ_DIR = obj
+BIN = tiny_football.exe
+SDL_BIN = lib/SDL2/bin
+
+# ===== Files =====
+SRC = $(wildcard $(SRC_DIR)/*.cpp)
+OBJ = $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRC))
+
+# ===== Build =====
+all: $(BIN)
+
+$(BIN): $(OBJ)
+	$(CXX) $(OBJ) -o $@ $(LDFLAGS) $(LIBS)
+
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
+	@if not exist $(OBJ_DIR) mkdir $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# ===== Run with DLL path =====
+run: all
+	@set PATH=%CD%\$(SDL_BIN);%PATH% && $(BIN)
+
+# ===== Clean =====
+clean:
+	@if exist $(OBJ_DIR) rmdir /s /q $(OBJ_DIR)
+	@if exist $(BIN) del $(BIN)
