@@ -1,28 +1,37 @@
-#ifndef GAME_H
-#define GAME_H
-
+#pragma once
 #include <SDL2/SDL.h>
-#include <stdbool.h>
+#include <SDL2/SDL_ttf.h>
+#include "state.h"
+#include "config.h"
 
 class Game {
-private:
-    SDL_Window* window;
-    SDL_Renderer* renderer;
-    bool running;
-
 public:
     Game();
     ~Game();
 
     bool init();
-    void handleEvents();
-    void update();
-    void render();
+    void run();
     void clean();
 
-    void run();
+private:
+    void handleEvents();
+    void update(float deltaTime);
+    void render();
 
-    SDL_Renderer* getRenderer();
+    void renderMenu();
+    void renderPlay();
+    void renderTimeText();
+
+    SDL_Window* window;
+    SDL_Renderer* renderer;
+
+    bool running;
+    GameState state;
+
+    // ===== Time =====
+    Uint32 lastTick;
+    float matchTimeLeft;
+
+    // ===== Text =====
+    TTF_Font* font;
 };
-
-#endif
