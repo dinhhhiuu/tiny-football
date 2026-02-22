@@ -1,5 +1,6 @@
 #include "game.h"
 #include <iostream>
+#include <cmath>
 
 Game::Game()
     : window(nullptr),
@@ -7,16 +8,23 @@ Game::Game()
       running(true),
       state(GameState::MENU),
       lastTick(0),
-      matchTimeLeft(MATCH_TIME_SECONDS) {}
+      matchTimeLeft(MATCH_TIME_SECONDS),
+      activePlayerTeam1(0),  // Start with first player of Team 1
+      activePlayerTeam2(3),  // Start with first player of Team 2
+      keyW(false), keyA(false), keyS(false), keyD(false),
+      keyUp(false), keyDown(false), keyLeft(false), keyRight(false) {}
 
 Game::~Game() {}
 
 bool Game::init() {
+    std::cout << "Initializing SDL...\n";
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-        std::cout << "SDL Init Failed\n";
+        std::cout << "SDL Init Failed: " << SDL_GetError() << "\n";
         return false;
     }
+    std::cout << "SDL initialized successfully\n";
 
+    std::cout << "Creating window...\n";
     window = SDL_CreateWindow(
         WINDOW_TITLE,
         SDL_WINDOWPOS_CENTERED,
@@ -26,24 +34,39 @@ bool Game::init() {
         SDL_WINDOW_SHOWN
     );
 
-    if (!window) return false;
+    if (!window) {
+        std::cout << "Window creation failed: " << SDL_GetError() << "\n";
+        return false;
+    }
+    std::cout << "Window created successfully\n";
 
     renderer = SDL_CreateRenderer(
         window, -1, SDL_RENDERER_ACCELERATED
     );
 
     if (TTF_Init() == -1) {
-        SDL_Log("TTF init failed");
-        return false;
-    }
-
-    font = TTF_OpenFont("assets/fonts/ZeroCool.ttf", 24);
-    if (!font) {
-        SDL_Log("Failed to load font");
-        return false;
+        SDL_Log("TTF init failed: %s\n", TTF_GetError());
+        std::cout << "Warning: TTF init failed, continuing without text\n";
+        font = nullptr;
+    } else {
+        font = TTF_OpenFont("assets/fonts/ZeroCool.ttf", 24);
+        if (!font) {
+            SDL_Log("Failed to load font: %s\n", TTF_GetError());
+            std::cout << "Warning: Font not loaded, continuing without text\n";
+        }
     }
 
     if (!renderer) return false;
+
+    // Task B: Initialize players
+    initPlayers();
+
+    std::cout << "\n=================================\n";
+    std::cout << "    TINY FOOTBALL - Ready!\n";
+    std::cout << "=================================\n";
+    std::cout << "Currently at MENU.\n";
+    std::cout << "Press ENTER to start playing\n";
+    std::cout << "Press ESC to exit\n\n";
 
     return true;
 }
@@ -66,9 +89,57 @@ void Game::run() {
 
 void Game::handleEvents() {
     SDL_Event e;
+    static bool firstEvent = true;
+    if (firstEvent) {
+        std::cout << "[DEBUG] handleEvents is running!\n";
+        firstEvent = false;
+    }
+    
     while (SDL_PollEvent(&e)) {
         if (e.type == SDL_QUIT) {
             state = GameState::EXIT;
+        }
+        
+        // Debug: Log keyboard events
+        if (e.type == SDL_KEYDOWN) {
+            std::cout << "[EVENT] Key pressed: " << SDL_GetKeyName(e.key.keysym.sym) << "\n";
+        }
+        
+        // ===== Task B: Track WASD and Arrow keys =====
+        if (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP) {
+            bool isDown = (e.type == SDL_KEYDOWN);
+            
+            switch (e.key.keysym.sym) {
+                case SDLK_w: keyW = isDown; break;
+                case SDLK_a: keyA = isDown; break;
+                case SDLK_s: keyS = isDown; break;
+                case SDLK_d: keyD = isDown; break;
+                case SDLK_UP: keyUp = isDown; break;
+                case SDLK_DOWN: keyDown = isDown; break;
+                case SDLK_LEFT: keyLeft = isDown; break;
+                case SDLK_RIGHT: keyRight = isDown; break;
+                
+                // TAB: Switch player in Team 1
+                case SDLK_TAB:
+                    if (e.type == SDL_KEYDOWN && state == GameState::PLAY) {
+                        players[activePlayerTeam1].isActive = false;
+                        activePlayerTeam1 = (activePlayerTeam1 + 1) % PLAYERS_PER_TEAM;
+                        players[activePlayerTeam1].isActive = true;
+                        std::cout << "[SWITCH] Team 1 now controls Player " << (activePlayerTeam1 + 1) << "\n";
+                    }
+                    break;
+                    
+                // SHIFT: Switch player in Team 2
+                case SDLK_RSHIFT:
+                case SDLK_LSHIFT:
+                    if (e.type == SDL_KEYDOWN && state == GameState::PLAY) {
+                        players[activePlayerTeam2].isActive = false;
+                        activePlayerTeam2 = 3 + ((activePlayerTeam2 - 3 + 1) % PLAYERS_PER_TEAM);
+                        players[activePlayerTeam2].isActive = true;
+                        std::cout << "[SWITCH] Team 2 now controls Player " << (activePlayerTeam2 - 2) << "\n";
+                    }
+                    break;
+            }
         }
 
         if (e.type == SDL_KEYDOWN) {
@@ -77,6 +148,14 @@ void Game::handleEvents() {
                     state = GameState::PLAY;
                     matchTimeLeft = MATCH_TIME_SECONDS;
                     lastTick = SDL_GetTicks(); // reset timer
+                    initPlayers(); // Task B: Reset players
+                    std::cout << "\n=== GAME STARTED (3v3) ===\n";
+                    std::cout << "Team 1 (BLUE): Use W A S D to move\n";
+                    std::cout << "  Press TAB to switch player\n";
+                    std::cout << "Team 2 (RED): Use Arrow Keys to move\n";
+                    std::cout << "  Press SHIFT to switch player\n";
+                    std::cout << "Active players have YELLOW circle\n";
+                    std::cout << "Press ESC to return to menu\n\n";
                 }
                 if (e.key.keysym.sym == SDLK_ESCAPE) {
                     state = GameState::EXIT;
@@ -101,8 +180,8 @@ void Game::update(float deltaTime) {
             // hoặc state = GameState::EXIT;
         }
 
-        // Sau này:
-        // update cầu thủ, bóng = dùng deltaTime
+        // Task B: Update players
+        updatePlayers(deltaTime);
     }
 }
 
@@ -138,6 +217,31 @@ void Game::renderMenu() {
 
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     SDL_RenderDrawRect(renderer, &box);
+    
+    if (!font) return; // Skip text if font not loaded
+    
+    // Menu text
+    SDL_Color white = {255, 255, 255, 255};
+    SDL_Surface* surface = TTF_RenderText_Solid(font, "TINY FOOTBALL", white);
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_Rect titleRect = {WINDOW_WIDTH / 2 - 80, WINDOW_HEIGHT / 2 - 60, 160, 30};
+    SDL_RenderCopy(renderer, texture, nullptr, &titleRect);
+    SDL_FreeSurface(surface);
+    SDL_DestroyTexture(texture);
+    
+    surface = TTF_RenderText_Solid(font, "Press ENTER to Play", white);
+    texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_Rect enterRect = {WINDOW_WIDTH / 2 - 90, WINDOW_HEIGHT / 2, 180, 25};
+    SDL_RenderCopy(renderer, texture, nullptr, &enterRect);
+    SDL_FreeSurface(surface);
+    SDL_DestroyTexture(texture);
+    
+    surface = TTF_RenderText_Solid(font, "ESC to Exit", white);
+    texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_Rect escRect = {WINDOW_WIDTH / 2 - 60, WINDOW_HEIGHT / 2 + 40, 120, 25};
+    SDL_RenderCopy(renderer, texture, nullptr, &escRect);
+    SDL_FreeSurface(surface);
+    SDL_DestroyTexture(texture);
 }
 
 void Game::renderPlay() {
@@ -150,9 +254,31 @@ void Game::renderPlay() {
     );
     SDL_RenderClear(renderer);
 
-    // vẽ sân + cầu thủ + bóng
+    // Draw soccer field
+    renderField();
+
+    // Task B: Render players
+    renderPlayers();
     
     renderTimeText();
+    
+    if (!font) return; // Skip hints if font not loaded
+    
+    // Player controls hint
+    SDL_Color white = {255, 255, 255, 255};
+    SDL_Surface* surface = TTF_RenderText_Solid(font, "P1: WASD", white);
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_Rect p1Rect = {10, WINDOW_HEIGHT - 30, 100, 20};
+    SDL_RenderCopy(renderer, texture, nullptr, &p1Rect);
+    SDL_FreeSurface(surface);
+    SDL_DestroyTexture(texture);
+    
+    surface = TTF_RenderText_Solid(font, "P2: Arrows", white);
+    texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_Rect p2Rect = {WINDOW_WIDTH - 120, WINDOW_HEIGHT - 30, 110, 20};
+    SDL_RenderCopy(renderer, texture, nullptr, &p2Rect);
+    SDL_FreeSurface(surface);
+    SDL_DestroyTexture(texture);
 }
 
 void Game::clean() {
@@ -165,6 +291,8 @@ void Game::clean() {
 }
 
 void Game::renderTimeText() {
+    if (!font) return; // Skip if font not loaded
+    
     int timeInt = static_cast<int>(matchTimeLeft);
     if (timeInt < 0) timeInt = 0;
 
@@ -182,4 +310,382 @@ void Game::renderTimeText() {
     SDL_FreeSurface(surface);
     SDL_RenderCopy(renderer, texture, nullptr, &dst);
     SDL_DestroyTexture(texture);
+}
+
+void Game::renderField() {
+    // Use field constants from config.h
+    const int fieldLeft = FIELD_LEFT;
+    const int fieldRight = FIELD_RIGHT;
+    const int fieldTop = FIELD_TOP;
+    const int fieldBottom = FIELD_BOTTOM;
+    const int fieldWidth = fieldRight - fieldLeft;
+    const int fieldHeight = fieldBottom - fieldTop;
+    const int centerX = WINDOW_WIDTH / 2;
+    const int centerY = WINDOW_HEIGHT / 2;
+    
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);  // White lines
+    
+    // ===== Outer boundary =====
+    SDL_Rect boundary = {fieldLeft, fieldTop, fieldWidth, fieldHeight};
+    SDL_RenderDrawRect(renderer, &boundary);
+    
+    // ===== Center line =====
+    SDL_RenderDrawLine(renderer, centerX, fieldTop, centerX, fieldBottom);
+    
+    // ===== Center circle =====
+    int centerRadius = 60;
+    for (int angle = 0; angle < 360; angle += 5) {
+        float rad1 = angle * 3.14159f / 180.0f;
+        float rad2 = (angle + 5) * 3.14159f / 180.0f;
+        int x1 = centerX + (int)(centerRadius * cos(rad1));
+        int y1 = centerY + (int)(centerRadius * sin(rad1));
+        int x2 = centerX + (int)(centerRadius * cos(rad2));
+        int y2 = centerY + (int)(centerRadius * sin(rad2));
+        SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
+    }
+    
+    // ===== Center spot =====
+    SDL_Rect centerSpot = {centerX - 3, centerY - 3, 6, 6};
+    SDL_RenderFillRect(renderer, &centerSpot);
+    
+    // ===== Left goal =====
+    int goalWidth = 80;
+    int goalDepth = 20;
+    SDL_Rect leftGoal = {fieldLeft - goalDepth, centerY - goalWidth/2, goalDepth, goalWidth};
+    SDL_RenderDrawRect(renderer, &leftGoal);
+    
+    // Left penalty area
+    int penaltyWidth = 160;
+    int penaltyDepth = 60;
+    SDL_Rect leftPenalty = {fieldLeft, centerY - penaltyWidth/2, penaltyDepth, penaltyWidth};
+    SDL_RenderDrawRect(renderer, &leftPenalty);
+    
+    // Left penalty spot
+    SDL_Rect leftSpot = {fieldLeft + 40, centerY - 3, 6, 6};
+    SDL_RenderFillRect(renderer, &leftSpot);
+    
+    // ===== Right goal =====
+    SDL_Rect rightGoal = {fieldRight, centerY - goalWidth/2, goalDepth, goalWidth};
+    SDL_RenderDrawRect(renderer, &rightGoal);
+    
+    // Right penalty area
+    SDL_Rect rightPenalty = {fieldRight - penaltyDepth, centerY - penaltyWidth/2, penaltyDepth, penaltyWidth};
+    SDL_RenderDrawRect(renderer, &rightPenalty);
+    
+    // Right penalty spot
+    SDL_Rect rightSpot = {fieldRight - 40, centerY - 3, 6, 6};
+    SDL_RenderFillRect(renderer, &rightSpot);
+    
+    // ===== Corner marks =====
+    int cornerSize = 10;
+    // Top-left
+    SDL_RenderDrawLine(renderer, fieldLeft, fieldTop, fieldLeft + cornerSize, fieldTop);
+    SDL_RenderDrawLine(renderer, fieldLeft, fieldTop, fieldLeft, fieldTop + cornerSize);
+    // Top-right
+    SDL_RenderDrawLine(renderer, fieldRight - cornerSize, fieldTop, fieldRight, fieldTop);
+    SDL_RenderDrawLine(renderer, fieldRight, fieldTop, fieldRight, fieldTop + cornerSize);
+    // Bottom-left
+    SDL_RenderDrawLine(renderer, fieldLeft, fieldBottom - cornerSize, fieldLeft, fieldBottom);
+    SDL_RenderDrawLine(renderer, fieldLeft, fieldBottom, fieldLeft + cornerSize, fieldBottom);
+    // Bottom-right
+    SDL_RenderDrawLine(renderer, fieldRight - cornerSize, fieldBottom, fieldRight, fieldBottom);
+    SDL_RenderDrawLine(renderer, fieldRight, fieldBottom - cornerSize, fieldRight, fieldBottom);
+}
+
+// ===== TASK B: PLAYER IMPLEMENTATION =====
+
+void Game::initPlayers() {
+    // ===== TEAM 1 (Blue) - Left side - Controlled by WASD =====
+    // Defender
+    players[0].x = WINDOW_WIDTH / 6.0f;
+    players[0].y = WINDOW_HEIGHT / 2.0f;
+    players[0].w = PLAYER_SIZE;
+    players[0].h = PLAYER_SIZE;
+    players[0].speed = PLAYER_SPEED;
+    players[0].playerID = 0;
+    players[0].teamID = 0;
+    players[0].isActive = true;
+    players[0].r = 50;
+    players[0].g = 100;
+    players[0].b = 255;
+    
+    // Midfielder
+    players[1].x = WINDOW_WIDTH / 3.5f;
+    players[1].y = WINDOW_HEIGHT / 3.0f;
+    players[1].w = PLAYER_SIZE;
+    players[1].h = PLAYER_SIZE;
+    players[1].speed = PLAYER_SPEED;
+    players[1].playerID = 1;
+    players[1].teamID = 0;
+    players[1].isActive = false;
+    players[1].r = 50;
+    players[1].g = 100;
+    players[1].b = 255;
+    
+    // Forward
+    players[2].x = WINDOW_WIDTH / 3.5f;
+    players[2].y = WINDOW_HEIGHT * 2.0f / 3.0f;
+    players[2].w = PLAYER_SIZE;
+    players[2].h = PLAYER_SIZE;
+    players[2].speed = PLAYER_SPEED;
+    players[2].playerID = 2;
+    players[2].teamID = 0;
+    players[2].isActive = false;
+    players[2].r = 50;
+    players[2].g = 100;
+    players[2].b = 255;
+    
+    // ===== TEAM 2 (Red) - Right side - Controlled by Arrow Keys =====
+    // Defender
+    players[3].x = WINDOW_WIDTH * 5.0f / 6.0f;
+    players[3].y = WINDOW_HEIGHT / 2.0f;
+    players[3].w = PLAYER_SIZE;
+    players[3].h = PLAYER_SIZE;
+    players[3].speed = PLAYER_SPEED;
+    players[3].playerID = 3;
+    players[3].teamID = 1;
+    players[3].isActive = true;
+    players[3].r = 255;
+    players[3].g = 50;
+    players[3].b = 50;
+    
+    // Midfielder
+    players[4].x = WINDOW_WIDTH * 2.5f / 3.5f;
+    players[4].y = WINDOW_HEIGHT / 3.0f;
+    players[4].w = PLAYER_SIZE;
+    players[4].h = PLAYER_SIZE;
+    players[4].speed = PLAYER_SPEED;
+    players[4].playerID = 4;
+    players[4].teamID = 1;
+    players[4].isActive = false;
+    players[4].r = 255;
+    players[4].g = 50;
+    players[4].b = 50;
+    
+    // Forward
+    players[5].x = WINDOW_WIDTH * 2.5f / 3.5f;
+    players[5].y = WINDOW_HEIGHT * 2.0f / 3.0f;
+    players[5].w = PLAYER_SIZE;
+    players[5].h = PLAYER_SIZE;
+    players[5].speed = PLAYER_SPEED;
+    players[5].playerID = 5;
+    players[5].teamID = 1;
+    players[5].isActive = false;
+    players[5].r = 255;
+    players[5].g = 50;
+    players[5].b = 50;
+    
+    activePlayerTeam1 = 0;
+    activePlayerTeam2 = 3;
+}
+
+void Game::updatePlayers(float deltaTime) {
+    // CHANGED: Use event-based keyboard state instead of SDL_GetKeyboardState
+    // This fixes the issue where W A S D keys were not detected
+    
+    // Debug: Check if any key is pressed
+    static int debugCounter = 0;
+    static bool firstCheck = true;
+    if (firstCheck) {
+        std::cout << "\n[DEBUG] updatePlayers using EVENT-BASED input!\n";
+        std::cout << "[DEBUG] 3v3 game! Use TAB (Team 1) and SHIFT (Team 2) to switch players\n";
+        firstCheck = false;
+    }
+    
+    if (debugCounter++ % 30 == 0) { // Print every 30 frames (0.5 seconds)
+        if (keyW || keyA || keyS || keyD) {
+            std::cout << "[INPUT] Team 1 Player " << (activePlayerTeam1 + 1) << " keys: ";
+            if (keyW) std::cout << "W ";
+            if (keyA) std::cout << "A ";
+            if (keyS) std::cout << "S ";
+            if (keyD) std::cout << "D ";
+            std::cout << "\n";
+        }
+    }
+    
+    // ===== Team 1 (Blue): W A S D - Only active player =====
+    int p1 = activePlayerTeam1;
+    if (keyW) {
+        players[p1].y -= players[p1].speed * deltaTime;
+    }
+    if (keyS) {
+        players[p1].y += players[p1].speed * deltaTime;
+    }
+    if (keyA) {
+        players[p1].x -= players[p1].speed * deltaTime;
+    }
+    if (keyD) {
+        players[p1].x += players[p1].speed * deltaTime;
+    }
+    
+    // ===== Team 2 (Red): Arrow Keys - Only active player =====
+    int p2 = activePlayerTeam2;
+    if (keyUp) {
+        players[p2].y -= players[p2].speed * deltaTime;
+    }
+    if (keyDown) {
+        players[p2].y += players[p2].speed * deltaTime;
+    }
+    if (keyLeft) {
+        players[p2].x -= players[p2].speed * deltaTime;
+    }
+    if (keyRight) {
+        players[p2].x += players[p2].speed * deltaTime;
+    }
+    
+    // ===== Keep players inside the FIELD (not window) =====
+    for (int i = 0; i < TOTAL_PLAYERS; i++) {
+        if (players[i].x < FIELD_LEFT) {
+            players[i].x = FIELD_LEFT;
+        }
+        if (players[i].x + players[i].w > FIELD_RIGHT) {
+            players[i].x = FIELD_RIGHT - players[i].w;
+        }
+        if (players[i].y < FIELD_TOP) {
+            players[i].y = FIELD_TOP;
+        }
+        if (players[i].y + players[i].h > FIELD_BOTTOM) {
+            players[i].y = FIELD_BOTTOM - players[i].h;
+        }
+    }
+}
+
+void Game::renderPlayers() {
+    static bool firstRender = true;
+    if (firstRender) {
+        std::cout << "[DEBUG] renderPlayers called! 3v3 game\n";
+        std::cout << "[DEBUG] Team 1 (Blue): 3 players\n";
+        std::cout << "[DEBUG] Team 2 (Red): 3 players\n";
+        firstRender = false;
+    }
+    
+    for (int i = 0; i < TOTAL_PLAYERS; i++) {
+        int centerX = players[i].x + players[i].w / 2;
+        
+        // Set player color
+        SDL_SetRenderDrawColor(renderer, players[i].r, players[i].g, players[i].b, 255);
+        
+        // ===== HEAD (circle with face color) =====
+        int headRadius = 7;
+        int headY = players[i].y + 10;
+        
+        // Skin color for head
+        SDL_SetRenderDrawColor(renderer, 255, 220, 177, 255); // Skin tone
+        for (int y = -headRadius; y <= headRadius; y++) {
+            for (int x = -headRadius; x <= headRadius; x++) {
+                if (x*x + y*y <= headRadius*headRadius) {
+                    SDL_RenderDrawPoint(renderer, centerX + x, headY + y);
+                }
+            }
+        }
+        
+        // Eyes
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderDrawPoint(renderer, centerX - 3, headY - 2);
+        SDL_RenderDrawPoint(renderer, centerX + 3, headY - 2);
+        
+        // ===== JERSEY (rectangle with number) =====
+        int jerseyTop = headY + headRadius;
+        int jerseyBottom = players[i].y + players[i].h - 12;
+        int jerseyLeft = centerX - 10;
+        int jerseyRight = centerX + 10;
+        
+        // Draw jersey body
+        SDL_SetRenderDrawColor(renderer, players[i].r, players[i].g, players[i].b, 255);
+        SDL_Rect jersey = {jerseyLeft, jerseyTop, 20, jerseyBottom - jerseyTop};
+        SDL_RenderFillRect(renderer, &jersey);
+        
+        // Jersey outline
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderDrawRect(renderer, &jersey);
+        
+        // ===== BIG NUMBER on jersey =====
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        int numX = centerX;
+        int numY = jerseyTop + 5;
+        int numSize = 8;
+        
+        if (i == 0) {
+            // Draw big "1"
+            SDL_Rect num1 = {numX - 2, numY, 4, numSize};
+            SDL_RenderFillRect(renderer, &num1);
+            // Top cap
+            SDL_RenderDrawLine(renderer, numX - 2, numY, numX - 4, numY + 2);
+        } else {
+            // Draw big "2"
+            SDL_Rect top = {numX - 4, numY, 8, 2};
+            SDL_Rect midRight = {numX + 2, numY, 2, 4};
+            SDL_Rect mid = {numX - 4, numY + 3, 8, 2};
+            SDL_Rect btmLeft = {numX - 4, numY + 3, 2, 5};
+            SDL_Rect btm = {numX - 4, numY + 6, 8, 2};
+            
+            SDL_RenderFillRect(renderer, &top);
+            SDL_RenderFillRect(renderer, &midRight);
+            SDL_RenderFillRect(renderer, &mid);
+            SDL_RenderFillRect(renderer, &btmLeft);
+            SDL_RenderFillRect(renderer, &btm);
+        }
+        
+        // ===== ARMS =====
+        SDL_SetRenderDrawColor(renderer, players[i].r, players[i].g, players[i].b, 255);
+        int armY = jerseyTop + 3;
+        int armLength = 10;
+        // Left arm (thick)
+        SDL_RenderDrawLine(renderer, jerseyLeft, armY, jerseyLeft - armLength, armY + 5);
+        SDL_RenderDrawLine(renderer, jerseyLeft, armY + 1, jerseyLeft - armLength, armY + 6);
+        // Right arm (thick)
+        SDL_RenderDrawLine(renderer, jerseyRight, armY, jerseyRight + armLength, armY + 5);
+        SDL_RenderDrawLine(renderer, jerseyRight, armY + 1, jerseyRight + armLength, armY + 6);
+        
+        // Hands (skin color)
+        SDL_SetRenderDrawColor(renderer, 255, 220, 177, 255);
+        SDL_Rect leftHand = {jerseyLeft - armLength - 2, armY + 4, 3, 3};
+        SDL_Rect rightHand = {jerseyRight + armLength - 1, armY + 4, 3, 3};
+        SDL_RenderFillRect(renderer, &leftHand);
+        SDL_RenderFillRect(renderer, &rightHand);
+        
+        // ===== SHORTS =====
+        SDL_SetRenderDrawColor(renderer, players[i].r - 50, players[i].g - 50, players[i].b - 50, 255);
+        SDL_Rect shorts = {jerseyLeft + 2, jerseyBottom, 16, 6};
+        SDL_RenderFillRect(renderer, &shorts);
+        
+        // ===== LEGS =====
+        int legTop = jerseyBottom + 6;
+        int legBottom = players[i].y + players[i].h - 2;
+        int legSpread = 4;
+        
+        // Skin color for legs
+        SDL_SetRenderDrawColor(renderer, 255, 220, 177, 255);
+        // Left leg (thick)
+        SDL_Rect leftLeg = {centerX - legSpread - 2, legTop, 3, legBottom - legTop};
+        SDL_RenderFillRect(renderer, &leftLeg);
+        // Right leg (thick)
+        SDL_Rect rightLeg = {centerX + legSpread - 1, legTop, 3, legBottom - legTop};
+        SDL_RenderFillRect(renderer, &rightLeg);
+        
+        // ===== SHOES =====
+        SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255); // Dark shoes
+        SDL_Rect leftShoe = {centerX - legSpread - 3, legBottom, 5, 3};
+        SDL_Rect rightShoe = {centerX + legSpread - 2, legBottom, 5, 3};
+        SDL_RenderFillRect(renderer, &leftShoe);
+        SDL_RenderFillRect(renderer, &rightShoe);
+        
+        // ===== ACTIVE PLAYER INDICATOR =====
+        if (players[i].isActive) {
+            // Draw yellow circle around active player
+            SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
+            int indicatorRadius = 25;
+            int indicatorY = players[i].y + players[i].h / 2;
+            for (int angle = 0; angle < 360; angle += 8) {
+                float rad1 = angle * 3.14159f / 180.0f;
+                float rad2 = (angle + 8) * 3.14159f / 180.0f;
+                int x1 = centerX + (int)(indicatorRadius * cos(rad1));
+                int y1 = indicatorY + (int)(indicatorRadius * sin(rad1));
+                int x2 = centerX + (int)(indicatorRadius * cos(rad2));
+                int y2 = indicatorY + (int)(indicatorRadius * sin(rad2));
+                SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
+                SDL_RenderDrawLine(renderer, x1-1, y1, x2-1, y2); // Thicker
+            }
+        }
+    }
 }

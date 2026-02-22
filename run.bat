@@ -1,9 +1,8 @@
 @echo off
-REM --- set SDL2 bin folder vào PATH tạm thời ---
-set THIS_DIR=%~dp0
-set PATH=%THIS_DIR%lib\SDL2\bin;%PATH%
-
-REM --- chạy exe ---
-"%THIS_DIR%tiny_football.exe"
-
+echo Starting Tiny Football...
+set PATH=%~dp0lib\SDL2\bin;C:\msys64\mingw64\bin;%PATH%
+"%~dp0tiny_football.exe"
+if errorlevel 1 (
+    echo Program exited with error code: %errorlevel%
+)
 pause
