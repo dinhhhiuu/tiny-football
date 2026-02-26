@@ -21,16 +21,12 @@ $(BIN): $(OBJ)
 	$(CXX) $(OBJ) -o $@ $(LDFLAGS) $(LIBS)
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
-#	 @if not exist $(OBJ_DIR) mkdir $(OBJ_DIR)
-	mkdir -p $(OBJ_DIR)
+	if not exist $(OBJ_DIR) mkdir $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-#	@if exist $(OBJ_DIR) rmdir /s /q $(OBJ_DIR)
-#	@if exist $(BIN) del $(BIN)
-	rm -rf $(OBJ_DIR)
-	rm -f $(BIN)
+	@if exist $(OBJ_DIR) rmdir /s /q $(OBJ_DIR)
+	@if exist $(BIN) del $(BIN)
 
 run: all
-#	set PATH=%CD%\lib\SDL2\bin;%PATH% && $(BIN)
-	PATH="$(PWD)/lib/SDL2/bin:$$PATH" ./$(BIN)
+	set PATH=%CD%\lib\SDL2\bin;%PATH% && $(BIN)
