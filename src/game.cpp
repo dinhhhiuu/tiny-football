@@ -390,20 +390,33 @@ void Game::renderField() {
     SDL_Rect rightSpot = {fieldRight - 40, centerY - 3, 6, 6};
     SDL_RenderFillRect(renderer, &rightSpot);
     
-    // ===== Corner marks =====
+    // ===== Corner marks (thicker filled marks to ensure visibility) =====
     int cornerSize = 10;
+    int thickness = 2;
+
     // Top-left
-    SDL_RenderDrawLine(renderer, fieldLeft, fieldTop, fieldLeft + cornerSize, fieldTop);
-    SDL_RenderDrawLine(renderer, fieldLeft, fieldTop, fieldLeft, fieldTop + cornerSize);
+    SDL_Rect tlH = { fieldLeft, fieldTop, cornerSize, thickness };
+    SDL_Rect tlV = { fieldLeft, fieldTop, thickness, cornerSize };
+    SDL_RenderFillRect(renderer, &tlH);
+    SDL_RenderFillRect(renderer, &tlV);
+
     // Top-right
-    SDL_RenderDrawLine(renderer, fieldRight - cornerSize, fieldTop, fieldRight, fieldTop);
-    SDL_RenderDrawLine(renderer, fieldRight, fieldTop, fieldRight, fieldTop + cornerSize);
+    SDL_Rect trH = { fieldRight - cornerSize, fieldTop, cornerSize, thickness };
+    SDL_Rect trV = { fieldRight - thickness, fieldTop, thickness, cornerSize };
+    SDL_RenderFillRect(renderer, &trH);
+    SDL_RenderFillRect(renderer, &trV);
+
     // Bottom-left
-    SDL_RenderDrawLine(renderer, fieldLeft, fieldBottom - cornerSize, fieldLeft, fieldBottom);
-    SDL_RenderDrawLine(renderer, fieldLeft, fieldBottom, fieldLeft + cornerSize, fieldBottom);
+    SDL_Rect blH = { fieldLeft, fieldBottom - thickness, cornerSize, thickness };
+    SDL_Rect blV = { fieldLeft, fieldBottom - cornerSize, thickness, cornerSize };
+    SDL_RenderFillRect(renderer, &blH);
+    SDL_RenderFillRect(renderer, &blV);
+
     // Bottom-right
-    SDL_RenderDrawLine(renderer, fieldRight - cornerSize, fieldBottom, fieldRight, fieldBottom);
-    SDL_RenderDrawLine(renderer, fieldRight, fieldBottom - cornerSize, fieldRight, fieldBottom);
+    SDL_Rect brH = { fieldRight - cornerSize, fieldBottom - thickness, cornerSize, thickness };
+    SDL_Rect brV = { fieldRight - thickness, fieldBottom - cornerSize, thickness, cornerSize };
+    SDL_RenderFillRect(renderer, &brH);
+    SDL_RenderFillRect(renderer, &brV);
 }
 
 // ===== TASK B: PLAYER IMPLEMENTATION =====
@@ -564,6 +577,7 @@ void Game::updatePlayers(float deltaTime) {
     }
 }
 
+// Draw players
 void Game::renderPlayers() {
     static bool firstRender = true;
     if (firstRender) {
@@ -619,7 +633,7 @@ void Game::renderPlayers() {
         int numY = jerseyTop + 5;
         int numSize = 8;
         
-        if (i == 0) {
+        if (i < PLAYERS_PER_TEAM) {
             // Draw big "1"
             SDL_Rect num1 = {numX - 2, numY, 4, numSize};
             SDL_RenderFillRect(renderer, &num1);
@@ -735,11 +749,15 @@ void Game::updateBall(float deltaTime) {
         // Team 2 scored to the left goal
         std::cout << "[GOAL] Team 2 (RED) scores! Total: " << score.team2Score + 1 << "\n";
         score.addGoal(1);
+        // Reset players to starting positions and reset ball to center
+        initPlayers();
         ball.reset(WINDOW_WIDTH / 2.0f, WINDOW_HEIGHT / 2.0f);
     } else if (goalResult == 2) {
         // Team 1 scored to the right goal
         std::cout << "[GOAL] Team 1 (BLUE) scores! Total: " << score.team1Score + 1 << "\n";
         score.addGoal(0);
+        // Reset players to starting positions and reset ball to center
+        initPlayers();
         ball.reset(WINDOW_WIDTH / 2.0f, WINDOW_HEIGHT / 2.0f);
     }
     
