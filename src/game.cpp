@@ -1,6 +1,7 @@
 #include "game.h"
 #include <iostream>
 #include <cmath>
+#include <string>
 
 Game::Game()
     : window(nullptr),
@@ -60,6 +61,10 @@ bool Game::init() {
 
     // Task B: Initialize players
     initPlayers();
+    
+    // Task C: Initialize ball and score
+    initBall();
+    score.reset();
 
     std::cout << "\n=================================\n";
     std::cout << "    TINY FOOTBALL - Ready!\n";
@@ -149,6 +154,8 @@ void Game::handleEvents() {
                     matchTimeLeft = MATCH_TIME_SECONDS;
                     lastTick = SDL_GetTicks(); // reset timer
                     initPlayers(); // Task B: Reset players
+                    initBall();    // Task C: Reset ball
+                    score.reset(); // Task C: Reset score
                     std::cout << "\n=== GAME STARTED (3v3) ===\n";
                     std::cout << "Team 1 (BLUE): Use W A S D to move\n";
                     std::cout << "  Press TAB to switch player\n";
@@ -182,6 +189,9 @@ void Game::update(float deltaTime) {
 
         // Task B: Update players
         updatePlayers(deltaTime);
+        
+        // Task C: Update ball
+        updateBall(deltaTime);
     }
 }
 
@@ -259,6 +269,10 @@ void Game::renderPlay() {
 
     // Task B: Render players
     renderPlayers();
+    
+    // Task C: Render ball and score
+    renderBall();
+    renderScore();
     
     renderTimeText();
     
@@ -688,4 +702,104 @@ void Game::renderPlayers() {
             }
         }
     }
+}
+// ===== TASK C: BALL IMPLEMENTATION =====
+
+void Game::initBall() {
+    ball.init(WINDOW_WIDTH / 2.0f, WINDOW_HEIGHT / 2.0f);
+}
+
+void Game::updateBall(float deltaTime) {
+    // Apply friction (simulation of air resistance)
+    ball.vx *= ball.friction;
+    ball.vy *= ball.friction;
+    
+    // Update position
+    ball.x += ball.vx * deltaTime;
+    ball.y += ball.vy * deltaTime;
+    
+    // Check wall collisions
+    checkBallWallCollision(ball);
+    
+    // Check collision with all players
+    for (int i = 0; i < TOTAL_PLAYERS; i++) {
+        if (checkBallPlayerCollision(ball, players[i])) {
+            // Ball hit a player
+            std::cout << "[KICK] Player " << (i + 1) << " kicked the ball!\n";
+        }
+    }
+    
+    // Check if goal was scored
+    int goalResult = checkGoal(ball);
+    if (goalResult == 1) {
+        // Team 2 scored to the left goal
+        std::cout << "[GOAL] Team 2 (RED) scores! Total: " << score.team2Score + 1 << "\n";
+        score.addGoal(1);
+        ball.reset(WINDOW_WIDTH / 2.0f, WINDOW_HEIGHT / 2.0f);
+    } else if (goalResult == 2) {
+        // Team 1 scored to the right goal
+        std::cout << "[GOAL] Team 1 (BLUE) scores! Total: " << score.team1Score + 1 << "\n";
+        score.addGoal(0);
+        ball.reset(WINDOW_WIDTH / 2.0f, WINDOW_HEIGHT / 2.0f);
+    }
+    
+    // Stabilize very slow velocities
+    float speedSq = ball.vx * ball.vx + ball.vy * ball.vy;
+    if (speedSq < 1.0f) {
+        ball.vx = 0.0f;
+        ball.vy = 0.0f;
+    }
+}
+
+void Game::renderBall() {
+    // Draw ball as a white circle
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    
+    int ballX = (int)ball.x;
+    int ballY = (int)ball.y;
+    int radius = (int)ball.radius;
+    
+    // Draw filled circle using midpoint circle algorithm
+    for (int y = -radius; y <= radius; y++) {
+        for (int x = -radius; x <= radius; x++) {
+            if (x*x + y*y < radius*radius) {  // Use < instead of <= to avoid artifacts
+                SDL_RenderDrawPoint(renderer, ballX + x, ballY + y);
+            }
+        }
+    }
+    
+    // Draw ball outline
+    SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
+    for (int angle = 0; angle < 360; angle += 4) {
+        float rad1 = angle * 3.14159f / 180.0f;
+        float rad2 = (angle + 4) * 3.14159f / 180.0f;
+        int x1 = ballX + (int)(radius * cos(rad1));
+        int y1 = ballY + (int)(radius * sin(rad1));
+        int x2 = ballX + (int)(radius * cos(rad2));
+        int y2 = ballY + (int)(radius * sin(rad2));
+        SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
+    }
+}
+
+void Game::renderScore() {
+    if (!font) return;
+    
+    // Create score text
+    std::string scoreText = "Team 1: " + std::to_string(score.team1Score) + 
+                           "  vs  " + 
+                           "Team 2: " + std::to_string(score.team2Score);
+    
+    SDL_Color white = {255, 255, 255, 255};
+    SDL_Surface* surface = TTF_RenderText_Solid(font, scoreText.c_str(), white);
+    
+    if (!surface) return;
+    
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    
+    // Center the score text at the top
+    SDL_Rect scoreRect = {WINDOW_WIDTH / 2 - surface->w / 2, 20, surface->w, surface->h};
+    SDL_RenderCopy(renderer, texture, nullptr, &scoreRect);
+    
+    SDL_FreeSurface(surface);
+    SDL_DestroyTexture(texture);
 }

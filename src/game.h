@@ -3,6 +3,9 @@
 #include <SDL2/SDL_ttf.h>
 #include "state.h"
 #include "config.h"
+#include "ball.h"
+#include "collision.h"
+#include "score.h"
 
 class Game {
 public:
@@ -27,6 +30,14 @@ private:
     void initPlayers();
     void updatePlayers(float deltaTime);
     void renderPlayers();
+    
+    // ===== Task C: Ball methods =====
+    void initBall();
+    void updateBall(float deltaTime);
+    void renderBall();
+    
+    // ===== Task C: Score methods =====
+    void renderScore();
 
     SDL_Window* window;
     SDL_Renderer* renderer;
@@ -49,4 +60,8 @@ private:
     // ===== Task B: Keyboard state (event-based) =====
     bool keyW, keyA, keyS, keyD;
     bool keyUp, keyDown, keyLeft, keyRight;
+    
+    // ===== Task C: Ball and Score =====
+    Ball ball;
+    Score score;
 };
