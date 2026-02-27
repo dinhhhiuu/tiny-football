@@ -21,8 +21,10 @@ private:
     void update(float deltaTime);
     void render();
 
+    void renderStart();
     void renderMenu();
     void renderPlay();
+    void renderResults();
     void renderTimeText();
     void renderField();  // Draw soccer field
     
@@ -44,6 +46,7 @@ private:
 
     bool running;
     GameState state;
+    GameMode mode;
 
     // ===== Time =====
     Uint32 lastTick;

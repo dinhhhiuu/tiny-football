@@ -7,7 +7,8 @@ Game::Game()
     : window(nullptr),
       renderer(nullptr),
       running(true),
-      state(GameState::MENU),
+      state(GameState::START),
+      mode(GameMode::PVP),
       lastTick(0),
       matchTimeLeft(MATCH_TIME_SECONDS),
       activePlayerTeam1(0),  // Start with first player of Team 1
@@ -69,7 +70,7 @@ bool Game::init() {
     std::cout << "\n=================================\n";
     std::cout << "    TINY FOOTBALL - Ready!\n";
     std::cout << "=================================\n";
-    std::cout << "Currently at MENU.\n";
+    std::cout << "Currently at START screen.\n";
     std::cout << "Press ENTER to start playing\n";
     std::cout << "Press ESC to exit\n\n";
 
@@ -148,7 +149,25 @@ void Game::handleEvents() {
         }
 
         if (e.type == SDL_KEYDOWN) {
-            if (state == GameState::MENU) {
+            if (state == GameState::START) {
+                if (e.key.keysym.sym == SDLK_RETURN) {
+                    state = GameState::MENU;
+                    std::cout << "Choose game mode .\n";
+                }
+                if (e.key.keysym.sym == SDLK_ESCAPE) {
+                    state = GameState::EXIT;
+                }
+            }
+            else if (state == GameState::MENU) {
+                // Mode selection: 1 = PVP, 2 = PVE
+                if (e.key.keysym.sym == SDLK_1) {
+                    mode = GameMode::PVP;
+                    std::cout << "[MODE] PVP selected\n";
+                } else if (e.key.keysym.sym == SDLK_2) {
+                    mode = GameMode::PVE;
+                    std::cout << "[MODE] PVE selected\n";
+                }
+
                 if (e.key.keysym.sym == SDLK_RETURN) {
                     state = GameState::PLAY;
                     matchTimeLeft = MATCH_TIME_SECONDS;
@@ -157,6 +176,7 @@ void Game::handleEvents() {
                     initBall();    // Task C: Reset ball
                     score.reset(); // Task C: Reset score
                     std::cout << "\n=== GAME STARTED (3v3) ===\n";
+                    std::cout << "Selected mode: " << (mode == GameMode::PVP ? "PVP" : "PVE") << "\n";
                     std::cout << "Team 1 (BLUE): Use W A S D to move\n";
                     std::cout << "  Press TAB to switch player\n";
                     std::cout << "Team 2 (RED): Use Arrow Keys to move\n";
@@ -170,7 +190,15 @@ void Game::handleEvents() {
             }
             else if (state == GameState::PLAY) {
                 if (e.key.keysym.sym == SDLK_ESCAPE) {
-                    state = GameState::MENU;
+                    state = GameState::START;
+                }
+            }
+            else if (state == GameState::RESULTS) {
+                if (e.key.keysym.sym == SDLK_RETURN) {
+                    state = GameState::MENU; // Back to mode selection
+                }
+                if (e.key.keysym.sym == SDLK_ESCAPE) {
+                    state = GameState::EXIT;
                 }
             }
         }
@@ -183,8 +211,8 @@ void Game::update(float deltaTime) {
 
         if (matchTimeLeft <= 0.0f) {
             // Hết trận
-            state = GameState::MENU; 
-            // hoặc state = GameState::EXIT;
+            matchTimeLeft = 0.0f;
+            state = GameState::RESULTS; // show results screen
         }
 
         // Task B: Update players
@@ -198,22 +226,28 @@ void Game::update(float deltaTime) {
 void Game::render() {
     SDL_RenderClear(renderer);
 
-    if (state == GameState::MENU) {
+    if (state == GameState::START) {
+        renderStart();
+    }
+    else if (state == GameState::MENU) {
         renderMenu();
     }
     else if (state == GameState::PLAY) {
         renderPlay();
     }
+    else if (state == GameState::RESULTS) {
+        renderResults();
+    }
 
     SDL_RenderPresent(renderer);
 }
 
-void Game::renderMenu() {
-    SDL_SetRenderDrawColor(
+void Game::renderStart() {
+        SDL_SetRenderDrawColor(
         renderer,
-        COLOR_MENU_BG_R,
-        COLOR_MENU_BG_G,
-        COLOR_MENU_BG_B,
+        COLOR_BG_R,
+        COLOR_BG_G,
+        COLOR_BG_B,
         255
     );
     SDL_RenderClear(renderer);
@@ -249,6 +283,71 @@ void Game::renderMenu() {
     surface = TTF_RenderText_Solid(font, "ESC to Exit", white);
     texture = SDL_CreateTextureFromSurface(renderer, surface);
     SDL_Rect escRect = {WINDOW_WIDTH / 2 - 60, WINDOW_HEIGHT / 2 + 40, 120, 25};
+    SDL_RenderCopy(renderer, texture, nullptr, &escRect);
+    SDL_FreeSurface(surface);
+    SDL_DestroyTexture(texture);
+}
+
+void Game::renderMenu() {
+    SDL_SetRenderDrawColor(
+        renderer,
+        COLOR_BG_R,
+        COLOR_BG_G,
+        COLOR_BG_B,
+        255
+    );
+    SDL_RenderClear(renderer);
+
+    SDL_Rect box = {
+        WINDOW_WIDTH / 2 - 150,
+        WINDOW_HEIGHT / 2 - 100,
+        300,
+        200
+    };
+
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_RenderDrawRect(renderer, &box);
+    
+    if (!font) return; // Skip text if font not loaded
+
+    // Menu text
+    SDL_Color white = {255, 255, 255, 255};
+    SDL_Surface* surface = TTF_RenderText_Solid(font, "TINY FOOTBALL", white);
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_Rect titleRect = {WINDOW_WIDTH / 2 - 80, WINDOW_HEIGHT / 2 - 90, 160, 30};
+    SDL_RenderCopy(renderer, texture, nullptr, &titleRect);
+    SDL_FreeSurface(surface);
+    SDL_DestroyTexture(texture);
+
+    // Options: 1 = PVP, 2 = PVE
+    std::string opt1 = (mode == GameMode::PVP) ? "> 1: PVP (Player vs Player)" : "  1: PVP (Player vs Player)";
+    std::string opt2 = (mode == GameMode::PVE) ? "> 2: PVE (Player vs AI)" : "  2: PVE (Player vs AI)";
+
+    surface = TTF_RenderText_Solid(font, opt1.c_str(), white);
+    texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_Rect o1Rect = {WINDOW_WIDTH / 2 - 150, WINDOW_HEIGHT / 2 - 40, surface->w, surface->h};
+    SDL_RenderCopy(renderer, texture, nullptr, &o1Rect);
+    SDL_FreeSurface(surface);
+    SDL_DestroyTexture(texture);
+
+    surface = TTF_RenderText_Solid(font, opt2.c_str(), white);
+    texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_Rect o2Rect = {WINDOW_WIDTH / 2 - 150, WINDOW_HEIGHT / 2 - 10, surface->w, surface->h};
+    SDL_RenderCopy(renderer, texture, nullptr, &o2Rect);
+    SDL_FreeSurface(surface);
+    SDL_DestroyTexture(texture);
+
+    // Start / exit hints
+    surface = TTF_RenderText_Solid(font, "Press ENTER to Start", white);
+    texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_Rect enterRect = {WINDOW_WIDTH / 2 - 90, WINDOW_HEIGHT / 2 + 30, 180, 25};
+    SDL_RenderCopy(renderer, texture, nullptr, &enterRect);
+    SDL_FreeSurface(surface);
+    SDL_DestroyTexture(texture);
+
+    surface = TTF_RenderText_Solid(font, "ESC to Exit", white);
+    texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_Rect escRect = {WINDOW_WIDTH / 2 - 60, WINDOW_HEIGHT / 2 + 60, 120, 25};
     SDL_RenderCopy(renderer, texture, nullptr, &escRect);
     SDL_FreeSurface(surface);
     SDL_DestroyTexture(texture);
@@ -291,6 +390,76 @@ void Game::renderPlay() {
     texture = SDL_CreateTextureFromSurface(renderer, surface);
     SDL_Rect p2Rect = {WINDOW_WIDTH - 120, WINDOW_HEIGHT - 30, 110, 20};
     SDL_RenderCopy(renderer, texture, nullptr, &p2Rect);
+    SDL_FreeSurface(surface);
+    SDL_DestroyTexture(texture);
+}
+
+void Game::renderResults() {
+    SDL_SetRenderDrawColor(
+        renderer,
+        COLOR_BG_R,
+        COLOR_BG_G,
+        COLOR_BG_B,
+        255
+    );
+    SDL_RenderClear(renderer);
+
+    SDL_Rect box = {
+        WINDOW_WIDTH / 2 - 200,
+        WINDOW_HEIGHT / 2 - 120,
+        400,
+        240
+    };
+
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_RenderDrawRect(renderer, &box);
+
+    if (!font) return;
+
+    SDL_Color white = {255, 255, 255, 255};
+
+    // Title
+    SDL_Surface* surface = TTF_RenderText_Solid(font, "MATCH ENDED", white);
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_Rect titleRect = {WINDOW_WIDTH / 2 - surface->w / 2, WINDOW_HEIGHT / 2 - 90, surface->w, surface->h};
+    SDL_RenderCopy(renderer, texture, nullptr, &titleRect);
+    SDL_FreeSurface(surface);
+    SDL_DestroyTexture(texture);
+
+    // Score
+    std::string scoreText = "Team 1: " + std::to_string(score.team1Score) + "  -  " + "Team 2: " + std::to_string(score.team2Score);
+    surface = TTF_RenderText_Solid(font, scoreText.c_str(), white);
+    texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_Rect scoreRect = {WINDOW_WIDTH / 2 - surface->w / 2, WINDOW_HEIGHT / 2 - 30, surface->w, surface->h};
+    SDL_RenderCopy(renderer, texture, nullptr, &scoreRect);
+    SDL_FreeSurface(surface);
+    SDL_DestroyTexture(texture);
+
+    // Winner text
+    std::string winner;
+    if (score.team1Score > score.team2Score) winner = "Team 1 (BLUE) wins!";
+    else if (score.team2Score > score.team1Score) winner = "Team 2 (RED) wins!";
+    else winner = "Draw!";
+
+    surface = TTF_RenderText_Solid(font, winner.c_str(), white);
+    texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_Rect winRect = {WINDOW_WIDTH / 2 - surface->w / 2, WINDOW_HEIGHT / 2 + 10, surface->w, surface->h};
+    SDL_RenderCopy(renderer, texture, nullptr, &winRect);
+    SDL_FreeSurface(surface);
+    SDL_DestroyTexture(texture);
+
+    // Hints
+    surface = TTF_RenderText_Solid(font, "Press ENTER to return to menu", white);
+    texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_Rect hintRect = {WINDOW_WIDTH / 2 - surface->w / 2, WINDOW_HEIGHT / 2 + 60, surface->w, surface->h};
+    SDL_RenderCopy(renderer, texture, nullptr, &hintRect);
+    SDL_FreeSurface(surface);
+    SDL_DestroyTexture(texture);
+
+    surface = TTF_RenderText_Solid(font, "Press ESC to exit", white);
+    texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_Rect escRect = {WINDOW_WIDTH / 2 - surface->w / 2, WINDOW_HEIGHT / 2 + 90, surface->w, surface->h};
+    SDL_RenderCopy(renderer, texture, nullptr, &escRect);
     SDL_FreeSurface(surface);
     SDL_DestroyTexture(texture);
 }

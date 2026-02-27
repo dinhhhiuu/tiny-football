@@ -13,9 +13,9 @@
 #define MATCH_TIME_SECONDS  60.0f  
 
 // ===== Colors =====
-#define COLOR_MENU_BG_R   30
-#define COLOR_MENU_BG_G   30
-#define COLOR_MENU_BG_B   30
+#define COLOR_BG_R   30
+#define COLOR_BG_G   30
+#define COLOR_BG_B   30
 
 #define COLOR_FIELD_R     0
 #define COLOR_FIELD_G     130
