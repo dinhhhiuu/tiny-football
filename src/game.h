@@ -31,6 +31,8 @@ private:
     // ===== Task B: Player methods =====
     void initPlayers();
     void updatePlayers(float deltaTime);
+    void updateAI(float deltaTime);
+    void checkBallInCorner();//
     void renderPlayers();
     
     // ===== Task C: Ball methods =====

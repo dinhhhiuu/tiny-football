@@ -41,9 +41,15 @@ struct Player {
     int w;            // width
     int h;            // height
     float speed;      // movement speed
+    // For improved physics: velocity and previous position
+    float vx;
+    float vy;
+    float prevX;
+    float prevY;
     int playerID;     // 0-2 = Team 1, 3-5 = Team 2
     int teamID;       // 0 = Team 1, 1 = Team 2
     bool isActive;    // Currently controlled by player
+    bool isAI;        // Controlled by AI
     
     // Colors
     unsigned char r;

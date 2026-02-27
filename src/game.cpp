@@ -1,7 +1,10 @@
 #include "game.h"
 #include <iostream>
 #include <cmath>
+#include <cstdlib>
 #include <string>
+
+// Timer tracking how long the ball has been in a corner
 
 Game::Game()
     : window(nullptr),
@@ -175,6 +178,19 @@ void Game::handleEvents() {
                     initPlayers(); // Task B: Reset players
                     initBall();    // Task C: Reset ball
                     score.reset(); // Task C: Reset score
+                    // If PVE selected, make Team 1 AI (disable player input indicator)
+                    if (mode == GameMode::PVE) {
+                        for (int i = 0; i < PLAYERS_PER_TEAM; ++i) {
+                            players[i].isActive = false; // team1 AI controls
+                            players[i].isAI = true;
+                        }
+                        // Ensure Team2 has an active player for human control
+                        activePlayerTeam2 = 3;
+                        players[activePlayerTeam2].isActive = true;
+                    } else {
+                        // clear AI flags in PVP
+                        for (int i = 0; i < PLAYERS_PER_TEAM; ++i) players[i].isAI = false;
+                    }
                     std::cout << "\n=== GAME STARTED (3v3) ===\n";
                     std::cout << "Selected mode: " << (mode == GameMode::PVP ? "PVP" : "PVE") << "\n";
                     std::cout << "Team 1 (BLUE): Use W A S D to move\n";
@@ -673,6 +689,15 @@ void Game::initPlayers() {
     
     activePlayerTeam1 = 0;
     activePlayerTeam2 = 3;
+
+    // Initialize velocity and prev positions
+    for (int i = 0; i < TOTAL_PLAYERS; ++i) {
+        players[i].vx = 0.0f;
+        players[i].vy = 0.0f;
+        players[i].prevX = players[i].x;
+        players[i].prevY = players[i].y;
+        players[i].isAI = false;
+    }
 }
 
 void Game::updatePlayers(float deltaTime) {
@@ -699,19 +724,31 @@ void Game::updatePlayers(float deltaTime) {
         }
     }
     
-    // ===== Team 1 (Blue): W A S D - Only active player =====
-    int p1 = activePlayerTeam1;
-    if (keyW) {
-        players[p1].y -= players[p1].speed * deltaTime;
+    // Save previous positions for velocity calculation
+    for (int i = 0; i < TOTAL_PLAYERS; ++i) {
+        players[i].prevX = players[i].x;
+        players[i].prevY = players[i].y;
     }
-    if (keyS) {
-        players[p1].y += players[p1].speed * deltaTime;
-    }
-    if (keyA) {
-        players[p1].x -= players[p1].speed * deltaTime;
-    }
-    if (keyD) {
-        players[p1].x += players[p1].speed * deltaTime;
+
+    // ===== Team 1 (Blue) =====
+    if (mode == GameMode::PVE) {
+        // AI controls Team 1 in PVE mode
+        updateAI(deltaTime);
+    } else {
+        // Human controls Team 1 (W A S D) - only active player
+        int p1 = activePlayerTeam1;
+        if (keyW) {
+            players[p1].y -= players[p1].speed * deltaTime;
+        }
+        if (keyS) {
+            players[p1].y += players[p1].speed * deltaTime;
+        }
+        if (keyA) {
+            players[p1].x -= players[p1].speed * deltaTime;
+        }
+        if (keyD) {
+            players[p1].x += players[p1].speed * deltaTime;
+        }
     }
     
     // ===== Team 2 (Red): Arrow Keys - Only active player =====
@@ -743,6 +780,12 @@ void Game::updatePlayers(float deltaTime) {
         if (players[i].y + players[i].h > FIELD_BOTTOM) {
             players[i].y = FIELD_BOTTOM - players[i].h;
         }
+    }
+
+    // Compute player velocities from position changes
+    for (int i = 0; i < TOTAL_PLAYERS; ++i) {
+        players[i].vx = (players[i].x - players[i].prevX) / (deltaTime > 0.0001f ? deltaTime : 0.0001f);
+        players[i].vy = (players[i].y - players[i].prevY) / (deltaTime > 0.0001f ? deltaTime : 0.0001f);
     }
 }
 
@@ -903,6 +946,9 @@ void Game::updateBall(float deltaTime) {
     
     // Check wall collisions
     checkBallWallCollision(ball);
+
+    //
+    checkBallInCorner();
     
     // Check collision with all players
     for (int i = 0; i < TOTAL_PLAYERS; i++) {
@@ -989,4 +1035,241 @@ void Game::renderScore() {
     
     SDL_FreeSurface(surface);
     SDL_DestroyTexture(texture);
+}
+// Simple AI for PVE mode (Team 1 - BLUE)
+// (corner detection and nudging removed per user request)
+
+// corner
+Corner currentCorner = Corner::NONE;
+void Game::checkBallInCorner() {
+    float cornerSize = 30.0f;
+        if (ball.x - ball.radius < FIELD_LEFT + cornerSize && ball.y - ball.radius < FIELD_TOP + cornerSize) {
+            currentCorner = Corner::TOP_LEFT;
+            std::cout << "[CORNER] Ball in TOP LEFT corner\n";
+        } else if (ball.x + ball.radius > FIELD_RIGHT - cornerSize && ball.y - ball.radius < FIELD_TOP + cornerSize) {
+            currentCorner = Corner::TOP_RIGHT;
+            std::cout << "[CORNER] Ball in TOP RIGHT corner\n";
+        } else if (ball.x - ball.radius < FIELD_LEFT + cornerSize && ball.y + ball.radius > FIELD_BOTTOM - cornerSize) {
+            currentCorner = Corner::BOTTOM_LEFT;
+            std::cout << "[CORNER] Ball in BOTTOM LEFT corner\n";
+        } else if (ball.x + ball.radius > FIELD_RIGHT - cornerSize && ball.y + ball.radius > FIELD_BOTTOM - cornerSize) {
+            currentCorner = Corner::BOTTOM_RIGHT;
+            std::cout << "[CORNER] Ball in BOTTOM RIGHT corner\n";
+        } else {
+            currentCorner = Corner::NONE;
+        }
+}
+
+void Game::updateAI(float deltaTime) {
+    // Team 1 goals: left side
+    float ownGoalX = FIELD_LEFT - 20.0f;
+    float ownGoalY = WINDOW_HEIGHT / 2.0f;
+    float fieldMidX = (FIELD_LEFT + FIELD_RIGHT) * 0.5f;
+
+    // global AI speed multiplier (reduce to make AI slower)
+    const float aiSpeedMult = 0.5f;
+
+    // ----- Player 0: normally position between ball and own goal; if ball in AI half, dash to ball -----
+    {
+        int i = 0;
+        float px = players[i].x + players[i].w / 2.0f;
+        float py = players[i].y + players[i].h / 2.0f;
+
+        // corner
+        if (currentCorner != Corner::NONE && (std::sqrt((ball.x - px)*(ball.x - px) + (ball.y - py)*(ball.y - py)) < 50.0f)) {
+            // Move towards center of field to escape corner
+            float targetX = WINDOW_WIDTH / 2.0f;
+            float targetY = WINDOW_HEIGHT / 2.0f;
+            float dx = targetX - px;
+            float dy = targetY - py;
+            float dist = std::sqrt(dx*dx + dy*dy);
+            if (dist > 1.0f) {
+                players[i].x += (dx / dist) * players[i].speed * aiSpeedMult * deltaTime;
+                players[i].y += (dy / dist) * players[i].speed * aiSpeedMult * deltaTime;
+            }
+        } else {
+            if (ball.x < fieldMidX) {
+                // Dash to ball aggressively but clamped to left half
+                float dx = ball.x - px;
+                float dy = ball.y - py;
+                float dist = std::sqrt(dx*dx + dy*dy);
+                float kickRange = 28.0f + ball.radius;
+                if (dist > 1.0f) {
+                    float dashSpeed = 1.4f * aiSpeedMult; // faster dash
+                    players[i].x += (dx / dist) * players[i].speed * dashSpeed * deltaTime;
+                    players[i].y += (dy / dist) * players[i].speed * dashSpeed * deltaTime;
+                }
+                // If within kicking range and ball is in AI half, kick it away from the player
+                if (dist <= kickRange) {
+                    // Only kick if ball is in front of player (to the right for Team 1)
+                    // require the ball's left edge to be strictly in front of player's center
+                    if (ball.x - ball.radius > px) {
+                        // direction from player to ball
+                        float nx = ball.x - px;
+                        float ny = ball.y - py;
+                        float nlen = std::sqrt(nx*nx + ny*ny);
+                        if (nlen < 0.001f) nlen = 1.0f;
+                        nx /= nlen; ny /= nlen;
+
+                        float kickForce = 420.0f; // moderate kick force
+                        std::cout << "[AI KICK] p0 center=" << px << " ball.center=" << ball.x << " ball.left=" << (ball.x - ball.radius) << " dist=" << dist << "\n";
+                        ball.kick(nx, ny, kickForce);
+                    }
+                }
+                // clamp to left half
+                float margin = 20.0f;
+                if (players[i].x + players[i].w/2.0f > fieldMidX - margin) {
+                    players[i].x = fieldMidX - margin - players[i].w/2.0f;
+                }
+            } else {
+                // default behavior: position between ball and own goal
+                float gx = ownGoalX - ball.x;
+                float gy = ownGoalY - ball.y;
+                float glen = std::sqrt(gx*gx + gy*gy);
+                if (glen < 0.0001f) glen = 1.0f;
+                gx /= glen; gy /= glen;
+
+                float offset = 80.0f; // distance from ball towards own goal
+                float targetX = ball.x + gx * offset;
+                float targetY = ball.y + gy * offset;
+
+                if (targetX + players[i].w/2.0f > fieldMidX - 40.0f) {
+                    targetX = fieldMidX - 40.0f - players[i].w/2.0f;
+                }
+
+                float dx = targetX - px;
+                float dy = targetY - py;
+                float dist = std::sqrt(dx*dx + dy*dy);
+                if (dist > 1.0f) {
+                    float speedFactor = 0.9f * aiSpeedMult;
+                    players[i].x += (dx / dist) * players[i].speed * speedFactor * deltaTime;
+                    players[i].y += (dy / dist) * players[i].speed * speedFactor * deltaTime;
+                }
+            }
+        }
+    }
+
+    // ----- Players 1 and 2: dynamic chaser/supporter behavior -----
+    {
+        int a = 1, b = 2;
+        float ax = players[a].x + players[a].w/2.0f;
+        float ay = players[a].y + players[a].h/2.0f;
+        float bx = players[b].x + players[b].w/2.0f;
+        float by = players[b].y + players[b].h/2.0f;
+
+        float distA = std::sqrt((ball.x - ax)*(ball.x - ax) + (ball.y - ay)*(ball.y - ay));
+        float distB = std::sqrt((ball.x - bx)*(ball.x - bx) + (ball.y - by)*(ball.y - by));
+
+        int chaser = (distA < distB) ? a : b;
+        int supporter = (chaser == a) ? b : a;
+
+        if (currentCorner != Corner::NONE && (distA < 50.0f || distB < 50.0f)) {
+            // If ball is in corner, both players should try to move towards center of field to escape corner
+            int i1 = chaser, i2 = supporter;
+            float targetX = WINDOW_WIDTH / 2.0f;
+            float targetY = WINDOW_HEIGHT / 2.0f;
+
+            for (int i : {i1, i2}) {
+                float px = players[i].x + players[i].w/2.0f;
+                float py = players[i].y + players[i].h/2.0f;
+                float dx = targetX - px;
+                float dy = targetY - py;
+                float dist = std::sqrt(dx*dx + dy*dy);
+                if (dist > 1.0f) {
+                    players[i].x += (dx / dist) * players[i].speed * aiSpeedMult * deltaTime;
+                    players[i].y += (dy / dist) * players[i].speed * aiSpeedMult * deltaTime;
+                }
+            }
+        }
+
+        // --- Chaser: pursue ball and kick when in range ---
+        {
+            int i = chaser;
+            float px = players[i].x + players[i].w/2.0f;
+            float py = players[i].y + players[i].h/2.0f;
+            float dx = ball.x - px;
+            float dy = ball.y - py;
+            float dist = std::sqrt(dx*dx + dy*dy);
+            float kickRange = 28.0f + ball.radius;
+
+            if (dist <= kickRange) {
+                float pxCenter = players[i].x + players[i].w/2.0f;
+                // require the ball's left edge to be in front of player's center
+                if (ball.x - ball.radius > pxCenter) {
+                    float oppGoalX = FIELD_RIGHT + 30.0f;
+                    float oppGoalY = WINDOW_HEIGHT / 2.0f;
+                    float gx = oppGoalX - ball.x;
+                    float gy = oppGoalY - ball.y;
+                    float glen = std::sqrt(gx*gx + gy*gy);
+                    if (glen < 0.001f) glen = 1.0f;
+                    gx /= glen; gy /= glen;
+                    float kickForce = 380.0f;
+                    std::cout << "[AI KICK] p" << i << " center=" << pxCenter << " ball.center=" << ball.x << "\n";
+                    ball.kick(gx, gy, kickForce);
+                } else {
+                    if (dist > 0.5f) {
+                        float speedFactor = aiSpeedMult;
+                        players[i].x += (dx / dist) * players[i].speed * speedFactor * deltaTime;
+                        players[i].y += (dy / dist) * players[i].speed * speedFactor * deltaTime;
+                    }
+                }
+            } else {
+                if (dist > 1.0f) {
+                    float speedFactor = aiSpeedMult;
+                    players[i].x += (dx / dist) * players[i].speed * speedFactor * deltaTime;
+                    players[i].y += (dy / dist) * players[i].speed * speedFactor * deltaTime;
+                }
+            }
+        }
+
+        // --- Supporter: mirror chaser to create passing lane / provide support ---
+        {
+            int i = supporter;
+            int lead = chaser;
+            float leadX = players[lead].x + players[lead].w/2.0f;
+            float leadY = players[lead].y + players[lead].h/2.0f;
+            float centerY = WINDOW_HEIGHT / 2.0f;
+            float mirroredY = 2.0f * centerY - leadY;
+            float smallOffsetX = 20.0f;
+            float targetX = leadX + smallOffsetX;
+            float targetY = mirroredY;
+
+            float px = players[i].x + players[i].w/2.0f;
+            float py = players[i].y + players[i].h/2.0f;
+            float dx = targetX - px;
+            float dy = targetY - py;
+            float dist = std::sqrt(dx*dx + dy*dy);
+
+            float distToBall = std::sqrt((ball.x - px)*(ball.x - px) + (ball.y - py)*(ball.y - py));
+            float kickRange = 28.0f + ball.radius;
+
+            if (distToBall <= kickRange) {
+                float pxCenter = players[i].x + players[i].w/2.0f;
+                if (ball.x - ball.radius > pxCenter) {
+                    float oppGoalX = FIELD_RIGHT + 30.0f;
+                    float oppGoalY = WINDOW_HEIGHT / 2.0f;
+                    float gx = oppGoalX - ball.x;
+                    float gy = oppGoalY - ball.y;
+                    float glen = std::sqrt(gx*gx + gy*gy);
+                    if (glen < 0.001f) glen = 1.0f;
+                    gx /= glen; gy /= glen;
+                    float kickForce = 350.0f;
+                    std::cout << "[AI KICK] p" << i << " center=" << pxCenter << " ball.center=" << ball.x << "\n";
+                    ball.kick(gx, gy, kickForce);
+                } else {
+                    if (dist > 0.5f) {
+                        float speedFactor = aiSpeedMult * 0.9f;
+                        players[i].x += (dx / dist) * players[i].speed * speedFactor * deltaTime;
+                        players[i].y += (dy / dist) * players[i].speed * speedFactor * deltaTime;
+                    }
+                }
+            } else {
+                if (dist > 1.0f) {
+                    float speedFactor = aiSpeedMult * 0.9f;
+                    players[i].x += (dx / dist) * players[i].speed * speedFactor * deltaTime;
+                    players[i].y += (dy / dist) * players[i].speed * speedFactor * deltaTime;
+                }
+            }
+        }
+    }
 }

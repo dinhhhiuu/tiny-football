@@ -1,6 +1,7 @@
 // Collision implementations
 #include "collision.h"
 #include <cmath>
+#include <algorithm>
 
 bool checkBallWallCollision(Ball& ball) {
     bool collided = false;
@@ -20,17 +21,48 @@ bool checkBallWallCollision(Ball& ball) {
     }
 
     // Left side wall (goal area)
-    if (ball.x - ball.radius < FIELD_LEFT && (ball.y < WINDOW_HEIGHT/2 - 50 || ball.y > WINDOW_HEIGHT/2 + 50)) {
-        ball.x = FIELD_LEFT + ball.radius;
-        ball.vx = -ball.vx * 0.9f;
-        collided = true;
+    {
+        int centerY = WINDOW_HEIGHT / 2;
+        int goalWidth = 80; // must match renderField
+        int goalDepth = 20;
+        int goalTop = centerY - goalWidth/2;
+        int goalBottom = centerY + goalWidth/2;
+
+        if (ball.x - ball.radius < FIELD_LEFT) {
+            // If ball is NOT within the vertical bounds of the goal, reflect it
+            if (ball.y < goalTop || ball.y > goalBottom) {
+                ball.x = FIELD_LEFT + ball.radius;
+                ball.vx = -ball.vx * 0.9f;
+                collided = true;
+            } else {
+                // Ball is within the goal mouth vertically. If it has passed the goal depth, allow goal detection elsewhere.
+                // If it is only slightly past FIELD_LEFT but hasn't reached the goal depth, leave it alone to continue moving.
+                if (ball.x - ball.radius < FIELD_LEFT - goalDepth) {
+                    // let checkGoal handle scoring
+                }
+            }
+        }
     }
 
     // Right side wall (goal area)
-    if (ball.x + ball.radius > FIELD_RIGHT && (ball.y < WINDOW_HEIGHT/2 - 50 || ball.y > WINDOW_HEIGHT/2 + 50)) {
-        ball.x = FIELD_RIGHT - ball.radius;
-        ball.vx = -ball.vx * 0.9f;
-        collided = true;
+    {
+        int centerY = WINDOW_HEIGHT / 2;
+        int goalWidth = 80; // must match renderField
+        int goalDepth = 20;
+        int goalTop = centerY - goalWidth/2;
+        int goalBottom = centerY + goalWidth/2;
+
+        if (ball.x + ball.radius > FIELD_RIGHT) {
+            if (ball.y < goalTop || ball.y > goalBottom) {
+                ball.x = FIELD_RIGHT - ball.radius;
+                ball.vx = -ball.vx * 0.9f;
+                collided = true;
+            } else {
+                if (ball.x + ball.radius > FIELD_RIGHT + goalDepth) {
+                    // let checkGoal detect score
+                }
+            }
+        }
     }
 
     return collided;
@@ -55,30 +87,67 @@ bool checkBallPlayerCollision(Ball& ball, const Player& player) {
         return false;  // No collision
     }
 
-    // Ball hit the player - calculate bounce direction
+    // Ball hit the player - use physics-based response
     float playerCenterX = player.x + player.w / 2.0f;
     float playerCenterY = player.y + player.h / 2.0f;
 
+    // Approximate player as circle for collision response
+    float playerRadius = std::max(player.w, player.h) * 0.5f;
+
     // Direction from player to ball
-    float dirX = ball.x - playerCenterX;
-    float dirY = ball.y - playerCenterY;
-    float distLen = std::sqrt(dirX * dirX + dirY * dirY);
+    float nx = ball.x - playerCenterX;
+    float ny = ball.y - playerCenterY;
+    float dist = std::sqrt(nx * nx + ny * ny);
+    if (dist < 0.0001f) {
+        // Prevent divide by zero
+        nx = 1.0f; ny = 0.0f; dist = 1.0f;
+    }
+    nx /= dist; ny /= dist; // normalize
 
-    if (distLen > 0.01f) {
-        // Normalize direction
-        dirX /= distLen;
-        dirY /= distLen;
-
-        // Push ball out to prevent overlap
-        float overlap = ball.radius + (player.w + player.h) / 4.0f;
-        ball.x = playerCenterX + dirX * overlap;
-        ball.y = playerCenterY + dirY * overlap;
+    // Penetration depth
+    float penetration = ball.radius + playerRadius - dist;
+    if (penetration > 0.0f) {
+        // Push ball out along normal
+        ball.x += nx * penetration;
+        ball.y += ny * penetration;
     }
 
-    // Apply bounce with kick force
-    float kickForce = 300.0f;  // pixels/sec
-    ball.vx = dirX * kickForce;
-    ball.vy = dirY * kickForce;
+    // Relative velocity (ball relative to player)
+    float rvx = ball.vx - player.vx;
+    float rvy = ball.vy - player.vy;
+
+    // Velocity along normal
+    float velAlongNormal = rvx * nx + rvy * ny;
+
+    // Only resolve if moving towards each other
+    if (velAlongNormal < 0.0f) {
+        // Use unified bounce parameters for all players
+        float e = 0.8f; // restitution (bounciness)
+        float impulseScale = 2.5f; // impulse multiplier
+
+        // Compute impulse directly from relative velocity and restitution
+        float j = -(1.0f + e) * velAlongNormal * impulseScale;
+
+        // Apply impulse to ball velocity
+        ball.vx += j * nx;
+        ball.vy += j * ny;
+    }
+
+    // Transfer a small portion of player's movement velocity to the ball (same for all players)
+    float playerSpeed = std::sqrt(player.vx * player.vx + player.vy * player.vy);
+    if (playerSpeed > 20.0f) {
+        float influence = 0.12f;
+        ball.vx += player.vx * influence;
+        ball.vy += player.vy * influence;
+    }
+
+    // Clamp ball speed to reasonable max
+    float speedSq = ball.vx * ball.vx + ball.vy * ball.vy;
+    if (speedSq > ball.maxSpeed * ball.maxSpeed) {
+        float scale = ball.maxSpeed / std::sqrt(speedSq);
+        ball.vx *= scale;
+        ball.vy *= scale;
+    }
 
     return true;
 }
