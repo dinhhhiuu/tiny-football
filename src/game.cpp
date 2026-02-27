@@ -765,6 +765,11 @@ void Game::updatePlayers(float deltaTime) {
     if (keyRight) {
         players[p2].x += players[p2].speed * deltaTime;
     }
+
+    // If in PVE mode, let the non-active Team 2 players be controlled by AI
+    if (mode == GameMode::PVE) {
+        updateTeam2AI(deltaTime);
+    }
     
     // ===== Keep players inside the FIELD (not window) =====
     for (int i = 0; i < TOTAL_PLAYERS; i++) {
@@ -1270,6 +1275,77 @@ void Game::updateAI(float deltaTime) {
                     players[i].y += (dy / dist) * players[i].speed * speedFactor * deltaTime;
                 }
             }
+        }
+    }
+}
+
+// Team 2 AI helper when human controls one Team 2 player in PVE
+void Game::updateTeam2AI(float deltaTime) {
+    // active player is controlled by human: activePlayerTeam2
+    int active = activePlayerTeam2; // should be 3..5
+    // define roles based on which player is active
+    int support = 3, defend = 4; // defaults
+    if (active == 3) { support = 4; defend = 5; }
+    else if (active == 4) { support = 5; defend = 3; }
+    else if (active == 5) { support = 3; defend = 4; }
+
+    // Ensure non-active players act as AI
+    for (int i = 3; i <=5; ++i) players[i].isAI = (i != active);
+
+    // Supporter: mirror active to create passing lane
+    {
+        int i = support;
+        float leadX = players[active].x + players[active].w/2.0f;
+        float leadY = players[active].y + players[active].h/2.0f;
+        float centerY = WINDOW_HEIGHT / 2.0f;
+        float mirroredY = 2.0f * centerY - leadY;
+        float smallOffsetX = -20.0f; // move slightly toward opponent (left)
+        float targetX = leadX + smallOffsetX;
+        float targetY = mirroredY;
+
+        float px = players[i].x + players[i].w/2.0f;
+        float py = players[i].y + players[i].h/2.0f;
+        float dx = targetX - px;
+        float dy = targetY - py;
+        float dist = std::sqrt(dx*dx + dy*dy);
+        if (dist > 1.0f) {
+            float speedFactor = 0.9f * 0.5f;
+            players[i].x += (dx / dist) * players[i].speed * speedFactor * deltaTime;
+            players[i].y += (dy / dist) * players[i].speed * speedFactor * deltaTime;
+        }
+    }
+
+    // Defender: position between ball and own goal (right side)
+    {
+        int i = defend;
+        float px = players[i].x + players[i].w/2.0f;
+        float py = players[i].y + players[i].h/2.0f;
+        float ownGoalX = FIELD_RIGHT + 20.0f;
+        float ownGoalY = WINDOW_HEIGHT / 2.0f;
+        float gx = ownGoalX - ball.x;
+        float gy = ownGoalY - ball.y;
+        float glen = std::sqrt(gx*gx + gy*gy);
+        if (glen < 0.0001f) glen = 1.0f;
+        gx /= glen; gy /= glen;
+        float offset = 80.0f;
+        float targetX = ball.x + gx * offset;
+        float targetY = ball.y + gy * offset;
+
+        // Prevent defender from wandering past midfield (keep on right half)
+        float fieldMidX = (FIELD_LEFT + FIELD_RIGHT) * 0.5f;
+        float halfW = players[i].w / 2.0f;
+        float minCenterX = fieldMidX + 40.0f; // defender shouldn't move left of this center X
+        if (targetX - halfW < minCenterX) {
+            targetX = minCenterX + halfW;
+        }
+
+        float dx = targetX - px;
+        float dy = targetY - py;
+        float dist = std::sqrt(dx*dx + dy*dy);
+        if (dist > 1.0f) {
+            float speedFactor = 0.9f * 0.5f;
+            players[i].x += (dx / dist) * players[i].speed * speedFactor * deltaTime;
+            players[i].y += (dy / dist) * players[i].speed * speedFactor * deltaTime;
         }
     }
 }
