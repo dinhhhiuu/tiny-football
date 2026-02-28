@@ -21,14 +21,19 @@ private:
     void update(float deltaTime);
     void render();
 
+    void renderStart();
     void renderMenu();
     void renderPlay();
+    void renderResults();
     void renderTimeText();
     void renderField();  // Draw soccer field
     
     // ===== Task B: Player methods =====
     void initPlayers();
     void updatePlayers(float deltaTime);
+    void updateTeam2AI(float deltaTime);
+    void updateAI(float deltaTime);
+    void checkBallInCorner();//
     void renderPlayers();
     
     // ===== Task C: Ball methods =====
@@ -44,13 +49,17 @@ private:
 
     bool running;
     GameState state;
+    GameMode mode;
 
     // ===== Time =====
     Uint32 lastTick;
     float matchTimeLeft;
 
     // ===== Text =====
+    TTF_Font* fontSmall;
     TTF_Font* font;
+    TTF_Font* fontLarge;
+    // SDL_Texture* startBallTexture;
     
     // ===== Task B: Players =====
     Player players[TOTAL_PLAYERS];  // 6 players (3v3)

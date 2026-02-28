@@ -13,9 +13,9 @@
 #define MATCH_TIME_SECONDS  60.0f  
 
 // ===== Colors =====
-#define COLOR_MENU_BG_R   30
-#define COLOR_MENU_BG_G   30
-#define COLOR_MENU_BG_B   30
+#define COLOR_BG_R   30
+#define COLOR_BG_G   30
+#define COLOR_BG_B   30
 
 #define COLOR_FIELD_R     0
 #define COLOR_FIELD_G     130
@@ -41,9 +41,15 @@ struct Player {
     int w;            // width
     int h;            // height
     float speed;      // movement speed
+    // For improved physics: velocity and previous position
+    float vx;
+    float vy;
+    float prevX;
+    float prevY;
     int playerID;     // 0-2 = Team 1, 3-5 = Team 2
     int teamID;       // 0 = Team 1, 1 = Team 2
     bool isActive;    // Currently controlled by player
+    bool isAI;        // Controlled by AI
     
     // Colors
     unsigned char r;
