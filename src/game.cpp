@@ -14,10 +14,11 @@ Game::Game()
       mode(GameMode::PVP),
       lastTick(0),
       matchTimeLeft(MATCH_TIME_SECONDS),
-      activePlayerTeam1(0),  // Start with first player of Team 1
-      activePlayerTeam2(3),  // Start with first player of Team 2
-      keyW(false), keyA(false), keyS(false), keyD(false),
-      keyUp(false), keyDown(false), keyLeft(false), keyRight(false) {}
+            // startBallTexture(nullptr),
+            activePlayerTeam1(0),  // Start with first player of Team 1
+            activePlayerTeam2(3),  // Start with first player of Team 2
+            keyW(false), keyA(false), keyS(false), keyD(false),
+            keyUp(false), keyDown(false), keyLeft(false), keyRight(false) {}
 
 Game::~Game() {}
 
@@ -53,8 +54,12 @@ bool Game::init() {
         SDL_Log("TTF init failed: %s\n", TTF_GetError());
         std::cout << "Warning: TTF init failed, continuing without text\n";
         font = nullptr;
+        fontSmall = nullptr;
+        fontLarge = nullptr;
     } else {
         font = TTF_OpenFont("assets/fonts/ZeroCool.ttf", 24);
+        fontSmall = TTF_OpenFont("assets/fonts/ZeroCool.ttf", 16);
+        fontLarge = TTF_OpenFont("assets/fonts/ZeroCool.ttf", 64);
         if (!font) {
             SDL_Log("Failed to load font: %s\n", TTF_GetError());
             std::cout << "Warning: Font not loaded, continuing without text\n";
@@ -62,6 +67,18 @@ bool Game::init() {
     }
 
     if (!renderer) return false;
+
+    // Initialize SDL_image for PNG support and load start-screen ball image
+    // int imgFlags = IMG_INIT_PNG;
+    // if (!(IMG_Init(imgFlags) & imgFlags)) {
+    //     SDL_Log("IMG_Init failed: %s", IMG_GetError());
+    //     // continue without image support
+    // } else {
+    //     startBallTexture = IMG_LoadTexture(renderer, "assets/images/ball.png");
+    //     if (!startBallTexture) {
+    //         SDL_Log("Failed to load start ball texture: %s", IMG_GetError());
+    //     }
+    // }
 
     // Task B: Initialize players
     initPlayers();
@@ -259,114 +276,466 @@ void Game::render() {
 }
 
 void Game::renderStart() {
-        SDL_SetRenderDrawColor(
-        renderer,
-        COLOR_BG_R,
-        COLOR_BG_G,
-        COLOR_BG_B,
-        255
-    );
+    // color
+    SDL_Color white = {255,255,255,255};
+    SDL_Color black = {0,0,0,255};
+
+    // Background
+    SDL_SetRenderDrawColor(renderer, COLOR_FIELD_R, COLOR_FIELD_G, COLOR_FIELD_B, 255);
     SDL_RenderClear(renderer);
 
-    SDL_Rect box = {
-        WINDOW_WIDTH / 2 - 150,
-        WINDOW_HEIGHT / 2 - 100,
-        300,
-        200
+    // ===== Center circle Half =====
+
+    // const
+    int centerRadius = 100;
+    int centerX = 0;
+    int centerY = WINDOW_HEIGHT / 2;
+
+    int goalWidth = 140;
+    int goalDepth = 40;
+
+    int penaltyWidth = 220;   
+    int penaltyDepth = 100; 
+
+    int cornerSize = 10;
+
+    int thickness = 3;
+
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);  // White lines
+    
+    for (int r = centerRadius - 2; r <= centerRadius + 2; r++) {
+        for (int angle = 0; angle < 360; angle += 5) {
+            float rad1 = angle * 3.14159f / 180.0f;
+            float rad2 = (angle + 5) * 3.14159f / 180.0f;
+
+            int x1 = centerX + (int)(r * cos(rad1));
+            int y1 = centerY + (int)(r * sin(rad1));
+
+            int x2 = centerX + (int)(r * cos(rad2));
+            int y2 = centerY + (int)(r * sin(rad2));
+
+            SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
+        }
+    }
+
+    // ===== Right goal =====
+    SDL_Rect rightGoal = { WINDOW_WIDTH - goalDepth, WINDOW_HEIGHT / 2 - goalWidth / 2, goalDepth, goalWidth };
+    for (int i = 0; i < thickness; i++) {
+        SDL_Rect g = {
+            rightGoal.x - i,
+            rightGoal.y - i,
+            rightGoal.w + 2*i,
+            rightGoal.h + 2*i
+        };
+        SDL_RenderDrawRect(renderer, &g);
+    }
+    
+    // Right penalty area
+    SDL_Rect rightPenalty = {
+        WINDOW_WIDTH - goalDepth - penaltyDepth,
+        WINDOW_HEIGHT / 2 - penaltyWidth/2,
+        penaltyDepth,
+        penaltyWidth
     };
 
+    for (int i = 0; i < thickness; i++) {
+        SDL_Rect p = {
+            rightPenalty.x - i,
+            rightPenalty.y - i,
+            rightPenalty.w + 2*i,
+            rightPenalty.h + 2*i
+        };
+        SDL_RenderDrawRect(renderer, &p);
+    }
+    
+    // Right penalty spot
+    SDL_Rect rightSpot = {WINDOW_WIDTH - goalDepth - penaltyDepth/2 - penaltyDepth/4, WINDOW_HEIGHT / 2, thickness * 2, thickness * 2};
+    SDL_RenderFillRect(renderer, &rightSpot);
+
+    // ===== Corner marks (thicker filled marks to ensure visibility) =====
+
+    // Top-right
+    SDL_Rect trH = { WINDOW_WIDTH - cornerSize - goalDepth, 0, cornerSize, thickness };
+    SDL_Rect trV = { WINDOW_WIDTH - thickness - goalDepth, 0, thickness, cornerSize };
+    SDL_RenderFillRect(renderer, &trH);
+    SDL_RenderFillRect(renderer, &trV);
+
+    // Bottom-right
+    SDL_Rect brH = { WINDOW_WIDTH - cornerSize - goalDepth, WINDOW_HEIGHT - thickness, cornerSize, thickness };
+    SDL_Rect brV = { WINDOW_WIDTH - thickness - goalDepth, WINDOW_HEIGHT - cornerSize, thickness, cornerSize };
+    SDL_RenderFillRect(renderer, &brH);
+    SDL_RenderFillRect(renderer, &brV);
+
+    // Line
+    SDL_Rect midLine = {
+        WINDOW_WIDTH - goalDepth - thickness/2,
+        0,
+        thickness,
+        WINDOW_HEIGHT
+    };
+
+    SDL_RenderFillRect(renderer, &midLine);
+
+    /* PLAYER */
+    for (int i = 0; i < TOTAL_PLAYERS; i += 2) {
+        int xPlayer = 300 + i * 60; 
+        int yPlayer = WINDOW_HEIGHT / 2 + i * 10;
+        int hPlayer = 80;
+
+        if (i == 0) {
+            xPlayer = 490; 
+            yPlayer = 100;
+        } else if (i == 2) {
+            xPlayer = 400; 
+            yPlayer = 180;
+        } else if (i == 4) {
+            xPlayer = 650; 
+            yPlayer = 250;
+        } 
+
+        // Set player color
+        SDL_SetRenderDrawColor(renderer, players[i].r, players[i].g, players[i].b, 255);
+        
+        // ===== HEAD (circle with face color) =====
+        int headRadius = 20;
+        SDL_SetRenderDrawColor(renderer, 255, 220, 177, 255); // Skin tone
+        for (int y = -headRadius; y <= headRadius; y++) {
+            for (int x = -headRadius; x <= headRadius; x++) {
+                if (x*x + y*y <= headRadius*headRadius) {
+                    SDL_RenderDrawPoint(renderer, xPlayer + x, yPlayer + y);
+                }
+            }
+        }
+        
+        // Eyes
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        int EyeRadius = 3;
+        for (int y = -EyeRadius; y <= EyeRadius; y++) {
+            for (int x = -EyeRadius; x <= EyeRadius; x++) {
+                if (x*x + y*y <= EyeRadius*EyeRadius) {
+                    SDL_RenderDrawPoint(renderer, xPlayer - 6 + x, yPlayer - 5 + y); // Left eye
+                    SDL_RenderDrawPoint(renderer, xPlayer + 6 + x, yPlayer - 5 + y); // Right eye
+                }
+            }
+        }
+
+        // ===== JERSEY (rectangle with number) =====
+        int jerseyWidth = 60;
+        int shortsHeight = 15;
+
+        int jerseyTop = yPlayer + headRadius;
+        int jerseyBottom = jerseyTop + hPlayer - shortsHeight; // 12: space for shorts
+        int jerseyLeft = xPlayer - jerseyWidth/2;
+        int jerseyRight = xPlayer + jerseyWidth/2;
+
+        int jerseyHeight = jerseyBottom - jerseyTop;
+        
+        // Draw jersey body
+        SDL_SetRenderDrawColor(renderer, players[i].r, players[i].g, players[i].b, 255);
+        SDL_Rect jersey = {jerseyLeft, jerseyTop, jerseyWidth, jerseyHeight};
+        SDL_RenderFillRect(renderer, &jersey);
+        
+        // Jersey outline
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderDrawRect(renderer, &jersey);
+        
+        // ===== BIG NUMBER on jersey =====
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        int xCenterJersey = xPlayer;
+        int yCenterJersey = jerseyTop + jerseyHeight / 2;
+        int numSize = 20;
+
+        if (i == 0 || i == 4) {
+            // Draw big "1"
+            SDL_Rect num1 = {xCenterJersey - 2, yCenterJersey - numSize/2, numSize/3, numSize + numSize/4};
+            SDL_Rect num1_cross = {xCenterJersey - numSize/3, yCenterJersey - numSize/4, numSize/2, numSize/4};
+            SDL_RenderFillRect(renderer, &num1_cross);
+            SDL_RenderFillRect(renderer, &num1);
+        } 
+        else {
+            // Draw big "2"
+            SDL_Rect top = {xCenterJersey - numSize/2, yCenterJersey - numSize/2 - numSize/4,  numSize, numSize/4};
+            SDL_Rect midRight = {xCenterJersey + numSize/2 - numSize/4, yCenterJersey - numSize/2, numSize/4, numSize - numSize/3}; 
+            SDL_Rect mid = {xCenterJersey - numSize/2, yCenterJersey + numSize/4 - numSize/3, numSize, numSize/4};
+            SDL_Rect btmLeft = {xCenterJersey - numSize/2, yCenterJersey, numSize/4, numSize - numSize/4}; 
+            SDL_Rect btm = {xCenterJersey - numSize/2, yCenterJersey + numSize/2 + numSize/4, numSize, numSize/4};
+            
+            SDL_RenderFillRect(renderer, &top);
+            SDL_RenderFillRect(renderer, &midRight);
+            SDL_RenderFillRect(renderer, &mid);
+            SDL_RenderFillRect(renderer, &btmLeft);
+            SDL_RenderFillRect(renderer, &btm);
+        }
+        
+        // ===== ARMS =====
+        SDL_SetRenderDrawColor(renderer, players[i].r, players[i].g, players[i].b, 255);
+        int armY = jerseyTop + 2; // 2: a little down from top of jersey to position arms better
+        int armLength = 20;
+        int thickness = 10;
+
+        SDL_SetRenderDrawColor(renderer, 255, 220, 177, 255);
+        // Hand left
+        for (int t = 0; t < thickness; t++) {
+            SDL_RenderDrawLine(
+                renderer,
+                jerseyLeft - 1,
+                armY + t,
+                jerseyLeft - armLength - 6,
+                armY + t + 8
+            );
+        }
+
+        // Hand right
+        for (int t = 0; t < thickness; t++) {
+            SDL_RenderDrawLine(
+                renderer,
+                jerseyRight + 1,
+                armY + t,
+                jerseyRight + armLength + 6,
+                armY + t + 8
+            );
+        }
+
+        SDL_SetRenderDrawColor(renderer, players[i].r, players[i].g, players[i].b, 255);
+        // Right arm (thick)
+        for (int t = 0; t <= thickness; t++) {
+            SDL_RenderDrawLine(
+                renderer,
+                jerseyLeft - 1,
+                armY + t,
+                jerseyLeft - armLength,
+                armY + t + 5
+            );
+        }
+        // Right arm (thick)
+        for (int t = 0; t <= thickness; t++) {
+            SDL_RenderDrawLine(
+                renderer,
+                jerseyRight,
+                armY + t,
+                jerseyRight + armLength,
+                armY + t + 5
+            );
+        }
+        
+        // ===== SHORTS =====
+        SDL_SetRenderDrawColor(renderer, players[i].r - 50, players[i].g - 50, players[i].b - 50, 255);
+        SDL_Rect shorts = {xPlayer - jerseyWidth/2, jerseyBottom, jerseyWidth, jerseyWidth/4};
+        SDL_RenderFillRect(renderer, &shorts);
+        
+        // ===== LEGS =====
+        int legTop = jerseyBottom + jerseyWidth/4;
+        int legBottom = jerseyBottom + jerseyWidth/4 + shortsHeight;
+        int legSpread = 8;
+        
+        // Skin color for legs
+        SDL_SetRenderDrawColor(renderer, 255, 220, 177, 255);
+        // Left leg (thick)
+        SDL_Rect leftLeg = {xPlayer - jerseyWidth/2, legTop, jerseyWidth/2 - legSpread, legBottom - legTop};
+        SDL_RenderFillRect(renderer, &leftLeg);
+        // Right leg (thick)
+        SDL_Rect rightLeg = {xPlayer + legSpread, legTop, jerseyWidth/2 - legSpread, legBottom - legTop};
+        SDL_RenderFillRect(renderer, &rightLeg);
+        
+        // ===== SHOES =====
+        SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255); // Dark shoes
+        SDL_Rect leftShoe = {xPlayer - jerseyWidth/2, legBottom, jerseyWidth/2 - legSpread, 8};
+        SDL_Rect rightShoe = {xPlayer + legSpread, legBottom, jerseyWidth/2 - legSpread, 8};
+        SDL_RenderFillRect(renderer, &leftShoe);
+        SDL_RenderFillRect(renderer, &rightShoe);
+    }
+
+
+    ////////////////////////////// ball
+    // Draw ball as a white circle
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    SDL_RenderDrawRect(renderer, &box);
     
-    if (!font) return; // Skip text if font not loaded
+    int ballX = 540;
+    int ballY = 260;
+    int radius = 25;
     
-    // Menu text
-    SDL_Color white = {255, 255, 255, 255};
-    SDL_Surface* surface = TTF_RenderText_Solid(font, "TINY FOOTBALL", white);
-    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_Rect titleRect = {WINDOW_WIDTH / 2 - 80, WINDOW_HEIGHT / 2 - 60, 160, 30};
-    SDL_RenderCopy(renderer, texture, nullptr, &titleRect);
-    SDL_FreeSurface(surface);
-    SDL_DestroyTexture(texture);
+    // Draw filled circle using midpoint circle algorithm
+    for (int y = -radius; y <= radius; y++) {
+        for (int x = -radius; x <= radius; x++) {
+            if (x*x + y*y < radius*radius) {  // Use < instead of <= to avoid artifacts
+                SDL_RenderDrawPoint(renderer, ballX + x, ballY + y);
+            }
+        }
+    }
     
-    surface = TTF_RenderText_Solid(font, "Press ENTER to Play", white);
-    texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_Rect enterRect = {WINDOW_WIDTH / 2 - 90, WINDOW_HEIGHT / 2, 180, 25};
-    SDL_RenderCopy(renderer, texture, nullptr, &enterRect);
-    SDL_FreeSurface(surface);
-    SDL_DestroyTexture(texture);
-    
-    surface = TTF_RenderText_Solid(font, "ESC to Exit", white);
-    texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_Rect escRect = {WINDOW_WIDTH / 2 - 60, WINDOW_HEIGHT / 2 + 40, 120, 25};
-    SDL_RenderCopy(renderer, texture, nullptr, &escRect);
-    SDL_FreeSurface(surface);
-    SDL_DestroyTexture(texture);
+    // Draw ball outline
+    SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
+    for (int angle = 0; angle < 360; angle += 4) {
+        float rad1 = angle * 3.14159f / 180.0f;
+        float rad2 = (angle + 4) * 3.14159f / 180.0f;
+        int x1 = ballX + (int)(radius * cos(rad1));
+        int y1 = ballY + (int)(radius * sin(rad1));
+        int x2 = ballX + (int)(radius * cos(rad2));
+        int y2 = ballY + (int)(radius * sin(rad2));
+        SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
+    }
+
+    // font
+    if (!font || !fontSmall || !fontLarge) return;
+
+    // ===== CREATE SURFACES (white text + black shadow) =====
+    SDL_Surface* tinyWhite = TTF_RenderText_Solid(fontLarge, "TINY", white);
+    SDL_Surface* tinyShadow = TTF_RenderText_Solid(fontLarge, "TINY", black);
+
+    SDL_Surface* footWhite = TTF_RenderText_Solid(fontLarge, "FOOTBALL", white);
+    SDL_Surface* footShadow = TTF_RenderText_Solid(fontLarge, "FOOTBALL", black);
+
+    if (!tinyWhite || !tinyShadow || !footWhite || !footShadow) {
+        if (tinyWhite) SDL_FreeSurface(tinyWhite);
+        if (tinyShadow) SDL_FreeSurface(tinyShadow);
+        if (footWhite) SDL_FreeSurface(footWhite);
+        if (footShadow) SDL_FreeSurface(footShadow);
+        return;
+    }
+
+    int gapBetweenLines = 6;
+    int textHeight = tinyWhite->h + gapBetweenLines + footWhite->h;
+
+    // ===== TITLE POSITION =====
+    int titleX = 50;
+    int titleY = WINDOW_HEIGHT / 2 - (textHeight) / 2;
+
+    int shadowOffset = 3;
+
+    // ================= TINY =================
+    SDL_Texture* tinyShadowTex = SDL_CreateTextureFromSurface(renderer, tinyShadow);
+    SDL_Rect tinyShadowRect = {
+        titleX + (footWhite->w/2 - tinyWhite->w/2) + shadowOffset - 8,
+        titleY + shadowOffset,
+        tinyShadow->w,
+        tinyShadow->h
+    };
+    SDL_RenderCopy(renderer, tinyShadowTex, nullptr, &tinyShadowRect);
+
+    SDL_Texture* tinyTex = SDL_CreateTextureFromSurface(renderer, tinyWhite);
+    SDL_Rect tinyRect = {
+        titleX + (footWhite->w/2 - tinyWhite->w/2) - 8,
+        titleY,
+        tinyWhite->w,
+        tinyWhite->h
+    };
+    SDL_RenderCopy(renderer, tinyTex, nullptr, &tinyRect);
+
+    // cleanup tiny
+    SDL_DestroyTexture(tinyShadowTex);
+    SDL_DestroyTexture(tinyTex);
+    SDL_FreeSurface(tinyShadow);
+    SDL_FreeSurface(tinyWhite);
+
+    titleY += tinyRect.h + gapBetweenLines;
+
+    // ================= FOOTBALL =================
+    SDL_Texture* footShadowTex = SDL_CreateTextureFromSurface(renderer, footShadow);
+    SDL_Rect footShadowRect = {
+        titleX + shadowOffset,
+        titleY + shadowOffset,
+        footShadow->w,
+        footShadow->h
+    };
+    SDL_RenderCopy(renderer, footShadowTex, nullptr, &footShadowRect);
+
+    SDL_Texture* footTex = SDL_CreateTextureFromSurface(renderer, footWhite);
+    SDL_Rect footRect = {
+        titleX,
+        titleY,
+        footWhite->w,
+        footWhite->h
+    };
+    SDL_RenderCopy(renderer, footTex, nullptr, &footRect);
+
+    // cleanup football
+    SDL_DestroyTexture(footShadowTex);
+    SDL_DestroyTexture(footTex);
+    SDL_FreeSurface(footShadow);
+    SDL_FreeSurface(footWhite);
+
+    // Start / exit hints 
+    SDL_Surface* enterSurface = TTF_RenderText_Solid(fontSmall, "ENTER = continue", white);
+    if (enterSurface) {
+        SDL_Texture* enterTex = SDL_CreateTextureFromSurface(renderer, enterSurface);
+        SDL_Rect enterRect = { WINDOW_WIDTH/2 - enterSurface->w/2, WINDOW_HEIGHT/2 + 180, enterSurface->w, enterSurface->h };
+        SDL_RenderCopy(renderer, enterTex, nullptr, &enterRect);
+        SDL_DestroyTexture(enterTex);
+        SDL_FreeSurface(enterSurface);
+    }
+
+    SDL_Surface* escSurface = TTF_RenderText_Solid(fontSmall, "ESC = Exit", white);
+    if (escSurface) {
+        SDL_Texture* escTex = SDL_CreateTextureFromSurface(renderer, escSurface);
+        SDL_Rect escRect = { WINDOW_WIDTH/2 - escSurface->w/2, WINDOW_HEIGHT/2 + enterSurface->h + 160 + 40, escSurface->w, escSurface->h };
+        SDL_RenderCopy(renderer, escTex, nullptr, &escRect);
+        SDL_DestroyTexture(escTex);
+        SDL_FreeSurface(escSurface);
+    }
 }
 
 void Game::renderMenu() {
-    SDL_SetRenderDrawColor(
-        renderer,
-        COLOR_BG_R,
-        COLOR_BG_G,
-        COLOR_BG_B,
-        255
-    );
+    SDL_SetRenderDrawColor(renderer, 12, 16, 20, 255);
     SDL_RenderClear(renderer);
 
-    SDL_Rect box = {
-        WINDOW_WIDTH / 2 - 150,
-        WINDOW_HEIGHT / 2 - 100,
-        300,
-        200
+    // ===== Panel =====
+    int panelW = 560;
+    int panelH = 340;
+    SDL_Rect panel = {
+        WINDOW_WIDTH/2 - panelW/2,
+        WINDOW_HEIGHT/2 - panelH/2,
+        panelW,
+        panelH
     };
 
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    SDL_RenderDrawRect(renderer, &box);
-    
-    if (!font) return; // Skip text if font not loaded
+    SDL_SetRenderDrawColor(renderer, 24, 28, 34, 255);
+    SDL_RenderFillRect(renderer, &panel);
 
-    // Menu text
-    SDL_Color white = {255, 255, 255, 255};
-    SDL_Surface* surface = TTF_RenderText_Solid(font, "TINY FOOTBALL", white);
-    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_Rect titleRect = {WINDOW_WIDTH / 2 - 80, WINDOW_HEIGHT / 2 - 90, 160, 30};
-    SDL_RenderCopy(renderer, texture, nullptr, &titleRect);
-    SDL_FreeSurface(surface);
-    SDL_DestroyTexture(texture);
+    SDL_SetRenderDrawColor(renderer, 180, 180, 180, 255);
+    SDL_RenderDrawRect(renderer, &panel);
 
-    // Options: 1 = PVP, 2 = PVE
-    std::string opt1 = (mode == GameMode::PVP) ? "> 1: PVP (Player vs Player)" : "  1: PVP (Player vs Player)";
-    std::string opt2 = (mode == GameMode::PVE) ? "> 2: PVE (Player vs AI)" : "  2: PVE (Player vs AI)";
+    if (!font) return;
 
-    surface = TTF_RenderText_Solid(font, opt1.c_str(), white);
-    texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_Rect o1Rect = {WINDOW_WIDTH / 2 - 150, WINDOW_HEIGHT / 2 - 40, surface->w, surface->h};
-    SDL_RenderCopy(renderer, texture, nullptr, &o1Rect);
-    SDL_FreeSurface(surface);
-    SDL_DestroyTexture(texture);
+    SDL_Color white = {255,255,255,255};
+    SDL_Color highlight = {120,220,120,255};
 
-    surface = TTF_RenderText_Solid(font, opt2.c_str(), white);
-    texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_Rect o2Rect = {WINDOW_WIDTH / 2 - 150, WINDOW_HEIGHT / 2 - 10, surface->w, surface->h};
-    SDL_RenderCopy(renderer, texture, nullptr, &o2Rect);
-    SDL_FreeSurface(surface);
-    SDL_DestroyTexture(texture);
+    int padding = 20;
+    int currentY = panel.y + padding;
 
-    // Start / exit hints
-    surface = TTF_RenderText_Solid(font, "Press ENTER to Start", white);
-    texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_Rect enterRect = {WINDOW_WIDTH / 2 - 90, WINDOW_HEIGHT / 2 + 30, 180, 25};
-    SDL_RenderCopy(renderer, texture, nullptr, &enterRect);
-    SDL_FreeSurface(surface);
-    SDL_DestroyTexture(texture);
+    auto renderCenteredText = [&](const std::string& text, SDL_Color color) {
+        SDL_Surface* surface = TTF_RenderText_Solid(font, text.c_str(), color);
+        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
 
-    surface = TTF_RenderText_Solid(font, "ESC to Exit", white);
-    texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_Rect escRect = {WINDOW_WIDTH / 2 - 60, WINDOW_HEIGHT / 2 + 60, 120, 25};
-    SDL_RenderCopy(renderer, texture, nullptr, &escRect);
-    SDL_FreeSurface(surface);
-    SDL_DestroyTexture(texture);
+        SDL_Rect rect = {
+            panel.x + (panel.w - surface->w)/2,
+            currentY,
+            surface->w,
+            surface->h
+        };
+
+        SDL_RenderCopy(renderer, texture, nullptr, &rect);
+        currentY += surface->h + 15;
+
+        SDL_FreeSurface(surface);
+        SDL_DestroyTexture(texture);
+    };
+
+    // ===== Title =====
+    renderCenteredText("TINY FOOTBALL", highlight);
+    currentY += 10;
+
+    // ===== Options =====
+    SDL_Color sel1 = (mode == GameMode::PVP) ? highlight : white;
+    SDL_Color sel2 = (mode == GameMode::PVE) ? highlight : white;
+
+    renderCenteredText("1: PVP (Player vs Player)", sel1);
+    renderCenteredText("2: PVE (Player vs AI)", sel2);
+
+    currentY += 40;
+
+    // ===== Hint =====
+    renderCenteredText("Press number to choose mode", white);
+    renderCenteredText("Press ENTER to start", white);
 }
 
 void Game::renderPlay() {
@@ -411,78 +780,67 @@ void Game::renderPlay() {
 }
 
 void Game::renderResults() {
-    SDL_SetRenderDrawColor(
-        renderer,
-        COLOR_BG_R,
-        COLOR_BG_G,
-        COLOR_BG_B,
-        255
-    );
+    // Dim background
+    SDL_SetRenderDrawColor(renderer, 8, 12, 16, 255);
     SDL_RenderClear(renderer);
 
-    SDL_Rect box = {
-        WINDOW_WIDTH / 2 - 200,
-        WINDOW_HEIGHT / 2 - 120,
-        400,
-        240
-    };
-
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    SDL_RenderDrawRect(renderer, &box);
+    SDL_Rect panel = { WINDOW_WIDTH/2 - 220, WINDOW_HEIGHT/2 - 140, 440, 280 };
+    SDL_SetRenderDrawColor(renderer, 30, 36, 44, 255);
+    SDL_RenderFillRect(renderer, &panel);
+    SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
+    SDL_RenderDrawRect(renderer, &panel);
 
     if (!font) return;
-
-    SDL_Color white = {255, 255, 255, 255};
+    SDL_Color white = {255,255,255,255};
+    SDL_Color winColor = {150,230,150,255};
+    SDL_Color loseColor = {230,150,150,255};
 
     // Title
     SDL_Surface* surface = TTF_RenderText_Solid(font, "MATCH ENDED", white);
     SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_Rect titleRect = {WINDOW_WIDTH / 2 - surface->w / 2, WINDOW_HEIGHT / 2 - 90, surface->w, surface->h};
+    SDL_Rect titleRect = { WINDOW_WIDTH/2 - surface->w/2, panel.y + 18, surface->w, surface->h };
     SDL_RenderCopy(renderer, texture, nullptr, &titleRect);
-    SDL_FreeSurface(surface);
-    SDL_DestroyTexture(texture);
+    SDL_FreeSurface(surface); SDL_DestroyTexture(texture);
 
     // Score
-    std::string scoreText = "Team 1: " + std::to_string(score.team1Score) + "  -  " + "Team 2: " + std::to_string(score.team2Score);
+    std::string scoreText = "Team 1: " + std::to_string(score.team1Score) + "    " + "Team 2: " + std::to_string(score.team2Score);
     surface = TTF_RenderText_Solid(font, scoreText.c_str(), white);
     texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_Rect scoreRect = {WINDOW_WIDTH / 2 - surface->w / 2, WINDOW_HEIGHT / 2 - 30, surface->w, surface->h};
+    SDL_Rect scoreRect = { WINDOW_WIDTH/2 - surface->w/2, panel.y + 80, surface->w, surface->h };
     SDL_RenderCopy(renderer, texture, nullptr, &scoreRect);
-    SDL_FreeSurface(surface);
-    SDL_DestroyTexture(texture);
+    SDL_FreeSurface(surface); SDL_DestroyTexture(texture);
 
-    // Winner text
+    // Winner
     std::string winner;
-    if (score.team1Score > score.team2Score) winner = "Team 1 (BLUE) wins!";
-    else if (score.team2Score > score.team1Score) winner = "Team 2 (RED) wins!";
-    else winner = "Draw!";
+    SDL_Color winnerColor = white;
+    if (score.team1Score > score.team2Score) { winner = "Team 1 (BLUE) wins!"; winnerColor = winColor; }
+    else if (score.team2Score > score.team1Score) { winner = "Team 2 (RED) wins!"; winnerColor = loseColor; }
+    else { winner = "Draw!"; winnerColor = white; }
 
-    surface = TTF_RenderText_Solid(font, winner.c_str(), white);
+    surface = TTF_RenderText_Solid(font, winner.c_str(), winnerColor);
     texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_Rect winRect = {WINDOW_WIDTH / 2 - surface->w / 2, WINDOW_HEIGHT / 2 + 10, surface->w, surface->h};
+    SDL_Rect winRect = { WINDOW_WIDTH/2 - surface->w/2, panel.y + 130, surface->w, surface->h };
     SDL_RenderCopy(renderer, texture, nullptr, &winRect);
-    SDL_FreeSurface(surface);
-    SDL_DestroyTexture(texture);
+    SDL_FreeSurface(surface); SDL_DestroyTexture(texture);
 
     // Hints
     surface = TTF_RenderText_Solid(font, "Press ENTER to return to menu", white);
     texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_Rect hintRect = {WINDOW_WIDTH / 2 - surface->w / 2, WINDOW_HEIGHT / 2 + 60, surface->w, surface->h};
+    SDL_Rect hintRect = { WINDOW_WIDTH/2 - surface->w/2, panel.y + 190, surface->w, surface->h };
     SDL_RenderCopy(renderer, texture, nullptr, &hintRect);
-    SDL_FreeSurface(surface);
-    SDL_DestroyTexture(texture);
-
-    surface = TTF_RenderText_Solid(font, "Press ESC to exit", white);
-    texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_Rect escRect = {WINDOW_WIDTH / 2 - surface->w / 2, WINDOW_HEIGHT / 2 + 90, surface->w, surface->h};
-    SDL_RenderCopy(renderer, texture, nullptr, &escRect);
-    SDL_FreeSurface(surface);
-    SDL_DestroyTexture(texture);
+    SDL_FreeSurface(surface); SDL_DestroyTexture(texture);
 }
 
 void Game::clean() {
+    // if (startBallTexture) {
+    //     SDL_DestroyTexture(startBallTexture);
+    //     startBallTexture = nullptr;
+    // }
+
     TTF_CloseFont(font);
     TTF_Quit();
+
+    // IMG_Quit();
 
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);

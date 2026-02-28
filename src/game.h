@@ -56,7 +56,10 @@ private:
     float matchTimeLeft;
 
     // ===== Text =====
+    TTF_Font* fontSmall;
     TTF_Font* font;
+    TTF_Font* fontLarge;
+    // SDL_Texture* startBallTexture;
     
     // ===== Task B: Players =====
     Player players[TOTAL_PLAYERS];  // 6 players (3v3)
