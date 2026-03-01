@@ -799,7 +799,7 @@ void Game::updateBall(float deltaTime) {
             std::cout << "[KICK] Player " << (i + 1) << " kicked the ball!\n";
         }
     }
-    
+        
     // Check if goal was scored
     int goalResult = checkGoal(ball);
     if (goalResult == 1) {
@@ -882,7 +882,7 @@ void Game::renderScore() {
 // (corner detection and nudging removed per user request)
 extern Corner currentCorner;
 void Game::checkBallInCorner() {
-    float cornerSize = 30.0f;
+    float cornerSize = 20.0f;
         if (ball.x - ball.radius < FIELD_LEFT + cornerSize && ball.y - ball.radius < FIELD_TOP + cornerSize) {
             currentCorner = Corner::TOP_LEFT;
             std::cout << "[CORNER] Ball in TOP LEFT corner\n";
