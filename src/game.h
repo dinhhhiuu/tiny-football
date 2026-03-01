@@ -31,8 +31,8 @@ private:
     // ===== Task B: Player methods =====
     void initPlayers();
     void updatePlayers(float deltaTime);
-    void updateTeam2AI(float deltaTime);
-    void updateAI(float deltaTime);
+    void updateTeam2AI(float deltaTime, Player players[], Ball& ball, int activePlayerTeam2);
+    void updateAI(float deltaTime, Player players[], Ball& ball); // Exposed for AI.cpp
     void checkBallInCorner();//
     void renderPlayers();
     
