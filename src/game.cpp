@@ -19,13 +19,14 @@ Game::Game()
             activePlayerTeam1(0),  // Start with first player of Team 1
             activePlayerTeam2(3),  // Start with first player of Team 2
             keyW(false), keyA(false), keyS(false), keyD(false),
-            keyUp(false), keyDown(false), keyLeft(false), keyRight(false) {}
+            keyUp(false), keyDown(false), keyLeft(false), keyRight(false),
+            windX(0.0f), windY(0.0f), windChangeTimer(0.0f), windDuration(5.0f) {}
 
 Game::~Game() {}
 
 bool Game::init() {
     std::cout << "Initializing SDL...\n";
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         std::cout << "SDL Init Failed: " << SDL_GetError() << "\n";
         return false;
     }
@@ -75,6 +76,12 @@ bool Game::init() {
     // Task C: Initialize ball and score
     initBall();
     score.reset();
+    
+    // Initialize wind system
+    initWind();
+    
+    // Initialize sound system
+    soundSystem.init();
 
     std::cout << "\n=================================\n";
     std::cout << "    TINY FOOTBALL - Ready!\n";
@@ -116,9 +123,9 @@ void Game::handleEvents() {
         }
         
         // Debug: Log keyboard events
-        if (e.type == SDL_KEYDOWN) {
-            std::cout << "[EVENT] Key pressed: " << SDL_GetKeyName(e.key.keysym.sym) << "\n";
-        }
+        // if (e.type == SDL_KEYDOWN) {
+        //     std::cout << "[EVENT] Key pressed: " << SDL_GetKeyName(e.key.keysym.sym) << "\n";
+        // }
         
         // ===== Task B: Track WASD and Arrow keys =====
         if (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP) {
@@ -205,6 +212,9 @@ void Game::handleEvents() {
                     std::cout << "  Press SHIFT to switch player\n";
                     std::cout << "Active players have YELLOW circle\n";
                     std::cout << "Press ESC to return to menu\n\n";
+                    
+                    // Play whistle sound to start the game
+                    soundSystem.playWhistleSound();
                 }
                 if (e.key.keysym.sym == SDLK_ESCAPE) {
                     state = GameState::EXIT;
@@ -213,6 +223,20 @@ void Game::handleEvents() {
             else if (state == GameState::PLAY) {
                 if (e.key.keysym.sym == SDLK_ESCAPE) {
                     state = GameState::START;
+                }
+                else if (e.key.keysym.sym == SDLK_p) {
+                    state = GameState::PAUSE;
+                    std::cout << "[PAUSE] Game paused\n";
+                }
+            }
+            else if (state == GameState::PAUSE) {
+                if (e.key.keysym.sym == SDLK_p || e.key.keysym.sym == SDLK_RETURN) {
+                    state = GameState::PLAY;
+                    std::cout << "[PAUSE] Game resumed\n";
+                }
+                else if (e.key.keysym.sym == SDLK_ESCAPE) {
+                    state = GameState::START;
+                    std::cout << "[PAUSE] Returning to menu\n";
                 }
             }
             else if (state == GameState::RESULTS) {
@@ -240,6 +264,13 @@ void Game::update(float deltaTime) {
         // Task B: Update players
         updatePlayers(deltaTime);
         
+        // Update wind
+        updateWind(deltaTime);
+        
+        // Update particle effects
+        particleSystem.update(deltaTime);
+        goalAnimation.update(deltaTime);
+        
         // Task C: Update ball
         updateBall(deltaTime);
     }
@@ -256,6 +287,9 @@ void Game::render() {
     }
     else if (state == GameState::PLAY) {
         renderPlay();
+    }
+    else if (state == GameState::PAUSE) {
+        renderPause();
     }
     else if (state == GameState::RESULTS) {
         renderResults();
@@ -292,6 +326,15 @@ void Game::renderPlay() {
     renderBall();
     renderScore();
     
+    // Render wind indicator
+    renderWindIndicator();
+    
+    // Render particle effects
+    particleSystem.render(renderer);
+    
+    // Render goal animation on top
+    goalAnimation.render(renderer, fontLarge);
+    
     renderTimeText();
     
     if (!font) return; // Skip hints if font not loaded
@@ -317,7 +360,62 @@ void Game::renderResults() {
     renderResultsScreen(renderer, font, fontSmall, fontLarge, score); 
 }
 
+void Game::renderPause() {
+    // First render the paused game state in the background
+    renderPlay();
+    
+    // Draw semi-transparent overlay
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180); // Dark overlay
+    SDL_Rect overlay = {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT};
+    SDL_RenderFillRect(renderer, &overlay);
+    
+    if (!font || !fontLarge) return;
+    
+    // Draw "PAUSED" text
+    SDL_Color yellow = {255, 255, 0, 255};
+    SDL_Surface* pauseSurf = TTF_RenderText_Solid(fontLarge, "PAUSED", yellow);
+    if (pauseSurf) {
+        SDL_Texture* pauseTex = SDL_CreateTextureFromSurface(renderer, pauseSurf);
+        SDL_Rect pauseRect = {
+            WINDOW_WIDTH/2 - pauseSurf->w/2,
+            WINDOW_HEIGHT/2 - 80,
+            pauseSurf->w,
+            pauseSurf->h
+        };
+        SDL_RenderCopy(renderer, pauseTex, nullptr, &pauseRect);
+        SDL_FreeSurface(pauseSurf);
+        SDL_DestroyTexture(pauseTex);
+    }
+    
+    // Draw instructions
+    SDL_Color white = {255, 255, 255, 255};
+    const char* instructions[] = {
+        "Press P or ENTER to Resume",
+        "Press ESC to Main Menu"
+    };
+    
+    int yPos = WINDOW_HEIGHT/2 + 20;
+    for (int i = 0; i < 2; i++) {
+        SDL_Surface* surf = TTF_RenderText_Solid(font, instructions[i], white);
+        if (surf) {
+            SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
+            SDL_Rect rect = {
+                WINDOW_WIDTH/2 - surf->w/2,
+                yPos + i * 40,
+                surf->w,
+                surf->h
+            };
+            SDL_RenderCopy(renderer, tex, nullptr, &rect);
+            SDL_FreeSurface(surf);
+            SDL_DestroyTexture(tex);
+        }
+    }
+}
+
 void Game::clean() {
+    soundSystem.cleanup();
+    
     TTF_CloseFont(font);
     TTF_Quit();
 
@@ -782,6 +880,11 @@ void Game::updateBall(float deltaTime) {
     ball.vx *= ball.friction;
     ball.vy *= ball.friction;
     
+    // Apply gentle wind force to ball
+    float windForce = 30.0f; // Gentle wind strength
+    ball.vx += windX * windForce * deltaTime;
+    ball.vy += windY * windForce * deltaTime;
+    
     // Update position
     ball.x += ball.vx * deltaTime;
     ball.y += ball.vy * deltaTime;
@@ -797,6 +900,10 @@ void Game::updateBall(float deltaTime) {
         if (checkBallPlayerCollision(ball, players[i])) {
             // Ball hit a player
             std::cout << "[KICK] Player " << (i + 1) << " kicked the ball!\n";
+            soundSystem.playKickSound();
+            
+            // Create kick particle effect
+            particleSystem.createKickEffect(ball.x, ball.y, ball.vx, ball.vy);
         }
     }
         
@@ -805,6 +912,12 @@ void Game::updateBall(float deltaTime) {
     if (goalResult == 1) {
         // Team 2 scored to the left goal
         std::cout << "[GOAL] Team 2 (RED) scores! Total: " << score.team2Score + 1 << "\n";
+        soundSystem.playGoalSound();
+        
+        // Goal celebration effects
+        particleSystem.createGoalExplosion(ball.x, ball.y);
+        goalAnimation.start(1);
+        
         score.addGoal(1);
         // Reset players to starting positions and reset ball to center
         initPlayers();
@@ -812,6 +925,12 @@ void Game::updateBall(float deltaTime) {
     } else if (goalResult == 2) {
         // Team 1 scored to the right goal
         std::cout << "[GOAL] Team 1 (BLUE) scores! Total: " << score.team1Score + 1 << "\n";
+        soundSystem.playGoalSound();
+        
+        // Goal celebration effects
+        particleSystem.createGoalExplosion(ball.x, ball.y);
+        goalAnimation.start(0);
+        
         score.addGoal(0);
         // Reset players to starting positions and reset ball to center
         initPlayers();
@@ -885,16 +1004,16 @@ void Game::checkBallInCorner() {
     float cornerSize = 20.0f;
         if (ball.x - ball.radius < FIELD_LEFT + cornerSize && ball.y - ball.radius < FIELD_TOP + cornerSize) {
             currentCorner = Corner::TOP_LEFT;
-            std::cout << "[CORNER] Ball in TOP LEFT corner\n";
+            // std::cout << "[CORNER] Ball in TOP LEFT corner\n";
         } else if (ball.x + ball.radius > FIELD_RIGHT - cornerSize && ball.y - ball.radius < FIELD_TOP + cornerSize) {
             currentCorner = Corner::TOP_RIGHT;
-            std::cout << "[CORNER] Ball in TOP RIGHT corner\n";
+            // std::cout << "[CORNER] Ball in TOP RIGHT corner\n";
         } else if (ball.x - ball.radius < FIELD_LEFT + cornerSize && ball.y + ball.radius > FIELD_BOTTOM - cornerSize) {
             currentCorner = Corner::BOTTOM_LEFT;
-            std::cout << "[CORNER] Ball in BOTTOM LEFT corner\n";
+            // std::cout << "[CORNER] Ball in BOTTOM LEFT corner\n";
         } else if (ball.x + ball.radius > FIELD_RIGHT - cornerSize && ball.y + ball.radius > FIELD_BOTTOM - cornerSize) {
             currentCorner = Corner::BOTTOM_RIGHT;
-            std::cout << "[CORNER] Ball in BOTTOM RIGHT corner\n";
+            // std::cout << "[CORNER] Ball in BOTTOM RIGHT corner\n";
         } else {
             currentCorner = Corner::NONE;
         }
@@ -907,4 +1026,104 @@ void Game::updateAI(float deltaTime, Player players[], Ball& ball) {
 
 void Game::updateTeam2AI(float deltaTime, Player players[], Ball& ball, int activePlayerIndex) {
     updateExtendedTeam2AI(deltaTime, players, ball, activePlayerIndex);
+}
+
+// ===== Wind system implementation =====
+void Game::initWind() {
+    // Start with gentle wind
+    windX = 0.0f;
+    windY = 0.0f;
+    windChangeTimer = 3.0f; // First wind change after 3 seconds
+}
+
+void Game::updateWind(float deltaTime) {
+    windChangeTimer -= deltaTime;
+    
+    if (windChangeTimer <= 0.0f) {
+        // Change wind direction and strength randomly (gentler)
+        float angle = (rand() % 360) * 3.14159f / 180.0f;
+        float strength = 0.1f + (rand() % 50) / 100.0f; // 0.1 to 0.6 (gentle)
+        
+        windX = cos(angle) * strength;
+        windY = sin(angle) * strength;
+        
+        // Reset timer (wind changes every 5-8 seconds)
+        windChangeTimer = windDuration + (rand() % 3);
+        
+        // std::cout << "[WIND] Wind changed: direction=" << (int)(angle * 180.0f / 3.14159f) 
+        //           << "° strength=" << strength << "\n";
+    }
+}
+
+void Game::renderWindIndicator() {
+    if (!font || !fontSmall) return;
+    
+    // Position at top-right, ABOVE the field
+    int boxX = WINDOW_WIDTH - 95;
+    int boxY = 5;
+    int boxWidth = 85;
+    int boxHeight = 40;
+    
+    // Draw background (brown/orange-tan like image)
+    SDL_Rect bgRect = {boxX, boxY, boxWidth, boxHeight};
+    SDL_SetRenderDrawColor(renderer, 90, 60, 40, 240);  // Darker brownish
+    SDL_RenderFillRect(renderer, &bgRect);
+    
+    // Draw border (lighter brown/tan)
+    SDL_SetRenderDrawColor(renderer, 160, 120, 80, 255);
+    SDL_RenderDrawRect(renderer, &bgRect);
+    
+    // Draw "Wind" label at top (orange-red like image)
+    SDL_Color labelColor = {255, 150, 80, 255};  // Orange-red
+    SDL_Surface* labelSurface = TTF_RenderText_Solid(fontSmall, "Wind", labelColor);
+    if (labelSurface) {
+        SDL_Texture* labelTexture = SDL_CreateTextureFromSurface(renderer, labelSurface);
+        SDL_Rect labelRect = {boxX + 3, boxY + 2, labelSurface->w, labelSurface->h};
+        SDL_RenderCopy(renderer, labelTexture, nullptr, &labelRect);
+        SDL_FreeSurface(labelSurface);
+        SDL_DestroyTexture(labelTexture);
+    }
+    
+    // Calculate wind components
+    float windStrength = std::sqrt(windX * windX + windY * windY);
+    int windValue1 = (int)(fabs(windX) * 10.0f);  // Horizontal component
+    int windValue2 = (int)(fabs(windY) * 10.0f);  // Vertical component
+    
+    // Draw first number (green, left side)
+    char text1[8];
+    snprintf(text1, sizeof(text1), "%d", windValue1);
+    SDL_Color greenColor = {100, 255, 100, 255};
+    
+    SDL_Surface* surf1 = TTF_RenderText_Solid(font, text1, greenColor);
+    if (surf1) {
+        SDL_Texture* tex1 = SDL_CreateTextureFromSurface(renderer, surf1);
+        SDL_Rect rect1 = {boxX + 8, boxY + 18, surf1->w, surf1->h};
+        SDL_RenderCopy(renderer, tex1, nullptr, &rect1);
+        SDL_FreeSurface(surf1);
+        SDL_DestroyTexture(tex1);
+    }
+    
+    // Draw dash "-" (green)
+    SDL_Surface* surfDash = TTF_RenderText_Solid(font, "-", greenColor);
+    if (surfDash) {
+        SDL_Texture* texDash = SDL_CreateTextureFromSurface(renderer, surfDash);
+        SDL_Rect rectDash = {boxX + 25, boxY + 18, surfDash->w, surfDash->h};
+        SDL_RenderCopy(renderer, texDash, nullptr, &rectDash);
+        SDL_FreeSurface(surfDash);
+        SDL_DestroyTexture(texDash);
+    }
+    
+    // Draw second number (purple/blue, right side)
+    char text2[8];
+    snprintf(text2, sizeof(text2), "%d", windValue2);
+    SDL_Color purpleColor = {150, 100, 255, 255};
+    
+    SDL_Surface* surf2 = TTF_RenderText_Solid(font, text2, purpleColor);
+    if (surf2) {
+        SDL_Texture* tex2 = SDL_CreateTextureFromSurface(renderer, surf2);
+        SDL_Rect rect2 = {boxX + 35, boxY + 18, surf2->w, surf2->h};
+        SDL_RenderCopy(renderer, tex2, nullptr, &rect2);
+        SDL_FreeSurface(surf2);
+        SDL_DestroyTexture(tex2);
+    }
 }

@@ -49,6 +49,46 @@ The NPC team uses a dynamic tactical role system, including:
 
 Roles rotate automatically based on ball proximity, creating fluid and dynamic behavior rather than static positioning.
 
+## Additional Library Setup
+
+To successfully build and run Tiny Football, you must manually provide the required SDL libraries.
+
+### Required Libraries
+
+This project depends on:
+
+- SDL2
+- SDL2_ttf
+
+These libraries are not included in the repository by default.
+
+### Setup Instructions
+
+1. Download the development versions of:
+
+- SDL2
+- SDL2_ttf
+
+(Make sure you download the MinGW development versions compatible with your compiler.)
+
+2. Extract the libraries.
+
+3. Copy the extracted folders into the project’s lib directory so the structure looks like:
+
+```
+Tiny-Football/
+│
+├── src/
+├── lib/
+│   ├── SDL2/
+│        ├── bin 
+│        │    └── SDL2.dll
+│        │    └── SDL2_ttf.dll
+│        ├── include (.h files)
+│        └── lib (cmake, pkgconfig and .a files)
+├── Makefile
+```
+
 ## Build & Run Instructions
 
 This project is built using MinGW (Windows environment).

@@ -6,6 +6,8 @@
 #include "ball.h"
 #include "collision.h"
 #include "score.h"
+#include "sound.h"
+#include "particles.h"
 
 class Game {
 public:
@@ -24,9 +26,11 @@ private:
     void renderStart();
     void renderMenu();
     void renderPlay();
+    void renderPause();
     void renderResults();
     void renderTimeText();
     void renderField();  // Draw soccer field
+    void renderWindIndicator();  // Draw wind indicator
     
     // ===== Task B: Player methods =====
     void initPlayers();
@@ -35,6 +39,10 @@ private:
     void updateAI(float deltaTime, Player players[], Ball& ball); // Exposed for AI.cpp
     void checkBallInCorner();//
     void renderPlayers();
+    
+    // ===== Wind system =====
+    void initWind();
+    void updateWind(float deltaTime);
     
     // ===== Task C: Ball methods =====
     void initBall();
@@ -73,4 +81,17 @@ private:
     // ===== Task C: Ball and Score =====
     Ball ball;
     Score score;
+    
+    // ===== Wind system =====
+    float windX;           // Wind force in X direction
+    float windY;           // Wind force in Y direction
+    float windChangeTimer; // Time until next wind change
+    float windDuration;    // How long each wind pattern lasts
+    
+    // ===== Sound system =====
+    SoundSystem soundSystem;
+    
+    // ===== Particle effects =====
+    ParticleSystem particleSystem;
+    GoalAnimation goalAnimation;
 };

@@ -20,12 +20,13 @@ void applyFieldBoundary(Player& p, float deltaTime, Ball& ball) {
     if (minimumAvoidBoundary[p.playerID] > 0) {
         p.x += pushStrength * deltaTime * (p.x < (FIELD_LEFT + FIELD_RIGHT) / 2.0f ? 1.0f : -1.0f);
         minimumAvoidBoundary[p.playerID]--;
+        std::cout << "[AI] Player " << p.playerID << " avoiding boundary, push applied. Remaining: " << minimumAvoidBoundary[p.playerID] << "\n";
     } 
-    else if (p.x - p.w/2.0f < leftLimit && ball.x - ball.radius < leftLimit) {  
-        minimumAvoidBoundary[p.playerID] = 5;
+    else if (p.x < leftLimit && ball.x - ball.radius < leftLimit) {  
+        minimumAvoidBoundary[p.playerID] = 25;
     }
-    else if (p.x + p.w/2.0f > rightLimit && ball.x + ball.radius > rightLimit) {
-        minimumAvoidBoundary[p.playerID] = 5;
+    else if (p.x + p.w > rightLimit && ball.x + ball.radius > rightLimit) {
+        minimumAvoidBoundary[p.playerID] = 25;
     }
 }
 
@@ -196,12 +197,6 @@ void updateExtendedAI(float deltaTime, Player players[], Ball& ball) {
         float targetX = ball.x + gx * offset;
         float targetY = ball.y + gy * offset;
 
-        // float fieldMidX = (FIELD_LEFT + FIELD_RIGHT) * 0.75f;
-        // float halfW = players[i].w / 2.0f;
-        // if (targetX + halfW > fieldMidX - 40.0f) {
-        //     targetX = fieldMidX - 40.0f - halfW;
-        // }
-
         applyFieldBoundary(players[i], deltaTime, ball);
 
         float dx = targetX - px;
@@ -284,7 +279,7 @@ void updateExtendedTeam2AI(float deltaTime, Player players[], Ball& ball, int ac
         float targetX, targetY;
 
         // Nếu bóng vào 1/4 sân → lao lên
-        if (ball.x >= dangerLine) {
+        if (ball.x >= dangerLine && ball.y > FIELD_TOP + fieldWidth * 0.15f && ball.y < FIELD_BOTTOM - fieldWidth * 0.15f) {
 
             targetX = ball.x + ((ball.x < px) ? -abs(randomOffset) : abs(randomOffset)); // offset to left or right of ball
             targetY = ball.y;
@@ -310,14 +305,6 @@ void updateExtendedTeam2AI(float deltaTime, Player players[], Ball& ball, int ac
             targetX = ball.x + gx * offset;
             targetY = ball.y + gy * offset;
         }
-
-        // Prevent defender from wandering past midfield (keep on right half)
-        // float fieldMidX = (FIELD_LEFT + FIELD_RIGHT) * 0.25f;
-        // float halfW = players[i].w / 2.0f;
-        // float minCenterX = fieldMidX + 40.0f; // defender shouldn't move left of this center X
-        // if (targetX - halfW < minCenterX) {
-        //     targetX = minCenterX + halfW;
-        // }
 
         float dx = targetX - px;
         float dy = targetY - py;
