@@ -123,9 +123,9 @@ void Game::handleEvents() {
         }
         
         // Debug: Log keyboard events
-        if (e.type == SDL_KEYDOWN) {
-            std::cout << "[EVENT] Key pressed: " << SDL_GetKeyName(e.key.keysym.sym) << "\n";
-        }
+        // if (e.type == SDL_KEYDOWN) {
+        //     std::cout << "[EVENT] Key pressed: " << SDL_GetKeyName(e.key.keysym.sym) << "\n";
+        // }
         
         // ===== Task B: Track WASD and Arrow keys =====
         if (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP) {
@@ -1004,16 +1004,16 @@ void Game::checkBallInCorner() {
     float cornerSize = 20.0f;
         if (ball.x - ball.radius < FIELD_LEFT + cornerSize && ball.y - ball.radius < FIELD_TOP + cornerSize) {
             currentCorner = Corner::TOP_LEFT;
-            std::cout << "[CORNER] Ball in TOP LEFT corner\n";
+            // std::cout << "[CORNER] Ball in TOP LEFT corner\n";
         } else if (ball.x + ball.radius > FIELD_RIGHT - cornerSize && ball.y - ball.radius < FIELD_TOP + cornerSize) {
             currentCorner = Corner::TOP_RIGHT;
-            std::cout << "[CORNER] Ball in TOP RIGHT corner\n";
+            // std::cout << "[CORNER] Ball in TOP RIGHT corner\n";
         } else if (ball.x - ball.radius < FIELD_LEFT + cornerSize && ball.y + ball.radius > FIELD_BOTTOM - cornerSize) {
             currentCorner = Corner::BOTTOM_LEFT;
-            std::cout << "[CORNER] Ball in BOTTOM LEFT corner\n";
+            // std::cout << "[CORNER] Ball in BOTTOM LEFT corner\n";
         } else if (ball.x + ball.radius > FIELD_RIGHT - cornerSize && ball.y + ball.radius > FIELD_BOTTOM - cornerSize) {
             currentCorner = Corner::BOTTOM_RIGHT;
-            std::cout << "[CORNER] Ball in BOTTOM RIGHT corner\n";
+            // std::cout << "[CORNER] Ball in BOTTOM RIGHT corner\n";
         } else {
             currentCorner = Corner::NONE;
         }
@@ -1050,8 +1050,8 @@ void Game::updateWind(float deltaTime) {
         // Reset timer (wind changes every 5-8 seconds)
         windChangeTimer = windDuration + (rand() % 3);
         
-        std::cout << "[WIND] Wind changed: direction=" << (int)(angle * 180.0f / 3.14159f) 
-                  << "° strength=" << strength << "\n";
+        // std::cout << "[WIND] Wind changed: direction=" << (int)(angle * 180.0f / 3.14159f) 
+        //           << "° strength=" << strength << "\n";
     }
 }
 
